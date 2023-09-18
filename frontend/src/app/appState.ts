@@ -1,5 +1,4 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit"
-import { configureStore } from '@reduxjs/toolkit'
 
 export type AppState = {
     userUuid: string | null
