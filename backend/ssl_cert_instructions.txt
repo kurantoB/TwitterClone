@@ -1,0 +1,8 @@
+Generate private key
+openssl genrsa -out key.pem
+
+Generate CSR
+openssl req -new -key key.pem -out csr.pem
+
+Generate certificate with private + public keys with expiry date 9999 days
+openssl x509 -req -days 9999 -in csr.pem -signkey key.pem -out cert.pem

@@ -1,6 +1,8 @@
 import express, { NextFunction, Request, Response } from "express"
 import passport from './auth'
 import session from "express-session"
+import https from 'https'
+import fs from 'fs'
 
 const app = express()
 const port = 8080
@@ -15,7 +17,7 @@ app.use(session({
     secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }
+    cookie: { secure: true }
 }))
 app.use(passport.initialize())
 app.use(passport.session())
@@ -46,12 +48,21 @@ app.get('/auth/protected', isLoggedIn, (req, res) => {
 
 /* eslint-disable */
 app.use('/auth/logout', (req, res) => {
-    req.session.destroy(_ => {})
+    req.session.destroy(_ => { })
     res.send("See you again!")
 })
 /* eslint-enable */
 
-app.listen(port, () => {
-    // tslint:disable-next-line:no-console
-    console.log(`server started at http://localhost:${ port}`)
-})
+https.createServer(
+    // Provide the private and public key to the server by reading each
+    // file's content with the readFileSync() method.
+    {
+        key: fs.readFileSync("key.pem"),
+        cert: fs.readFileSync("cert.pem"),
+    },
+    app
+)
+    .listen(port, () => {
+        // tslint:disable-next-line:no-console
+        console.log(`server started at https://localhost:${port}`)
+    })
