@@ -9,7 +9,8 @@ module.exports = {
   plugins: ['@typescript-eslint'],
   root: true,
   rules: {
-    "@typescript-eslint/no-explicit-any": ["off"]
+    "@typescript-eslint/no-explicit-any": ["off"],
+    // "@typescript-eslint/no-unused-vars" : "off"
   },
   ignorePatterns: ["dist/**"]
 };

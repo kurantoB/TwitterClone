@@ -4,6 +4,10 @@ import session from "express-session"
 import https from 'https'
 import fs from 'fs'
 
+import testDB from "./dbtest"
+
+testDB()
+
 const app = express()
 const port = 8080
 
@@ -43,7 +47,7 @@ app.get('/auth/google/failure', (req, res) => {
 
 app.get('/auth/protected', isLoggedIn, (req, res) => {
     const name = req.user.displayName
-    res.send(`Hello ${name}, your id is ${req.user.id}`)
+    res.send(`Hello ${name}, your id is ${req.user.id} of type ${typeof req.user.id}`)
 })
 
 /* eslint-disable */
