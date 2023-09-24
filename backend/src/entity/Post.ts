@@ -54,6 +54,16 @@ export class Post {
     })
     isParentPostDeleted: boolean
 
+    @Column({
+        nullable: true
+    })
+    media: string
+
+    @Column({
+        nullable: true
+    })
+    compressedMedia: string
+
     @CreateDateColumn({ type: "timestamptz" })
     createTime: Date
 }

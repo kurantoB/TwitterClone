@@ -27,10 +27,12 @@ export async function insertUser(user: User) {
     return await AppDataSource.getRepository(User).insert(user)
 }
 
+// make sure the old avatar is cleared from storage first, if there is an avatar update
 export async function updateUser(user: User) {
     return await AppDataSource.getRepository(User).save(user)
 }
 
+// make sure the avatar is cleared from storage first
 export async function deleteUser(user: User) {
     const dmsToDelete = await AppDataSource.getRepository(DM).find({
         where: [
@@ -103,6 +105,7 @@ export async function postOrReplyHook(
     )
 }
 
+// make sure the media is cleared from storage first
 export async function deletePost(post: Post) {
     const replies = await AppDataSource
         .getRepository(Post)

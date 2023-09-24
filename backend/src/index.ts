@@ -4,9 +4,9 @@ import session from "express-session"
 import https from 'https'
 import fs from 'fs'
 
-import testDB from "./dbtest"
+// import testDB from "./dbtest"
 
-testDB()
+// testDB()
 
 const app = express()
 const port = 8080
