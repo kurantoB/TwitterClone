@@ -1,7 +1,7 @@
 import passport from 'passport'
 import { Strategy as GoogleStrategy, VerifyCallback } from 'passport-google-oauth2'
 import dotenv from 'dotenv'
-import { Request } from 'express'
+import { NextFunction, Request, Response } from 'express'
 
 dotenv.config()
 
@@ -25,5 +25,13 @@ passport.serializeUser((user, done) => {
 passport.deserializeUser((user: Express.User, done) => {
     done(null, user)
 })
+
+export function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
+    if (req.isAuthenticated()) {
+        return next()
+    }
+    // res.redirect('/login')
+    req.user ? next() : res.sendStatus(401) // unauthorized
+}
 
 export default passport

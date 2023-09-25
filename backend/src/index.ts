@@ -1,5 +1,5 @@
 import express, { NextFunction, Request, Response } from "express"
-import passport from './auth'
+import passport, { ensureAuthenticated } from './auth'
 import session from "express-session"
 import https from 'https'
 import fs from 'fs'
@@ -12,10 +12,6 @@ const app = express()
 const port = 8080
 
 app.use(express.json())
-
-function isLoggedIn(req: Request, res: Response, next: NextFunction) {
-    req.user ? next() : res.sendStatus(401) // unauthorized
-}
 
 app.use(session({
     secret: process.env.SESSION_SECRET,
@@ -45,7 +41,7 @@ app.get('/auth/google/failure', (req, res) => {
     res.send("Something went wrong!")
 })
 
-app.get('/auth/protected', isLoggedIn, (req, res) => {
+app.get('/auth/protected', ensureAuthenticated, (req, res) => {
     const name = req.user.displayName
     res.send(`Hello ${name}, your id is ${req.user.id} of type ${typeof req.user.id}`)
 })
