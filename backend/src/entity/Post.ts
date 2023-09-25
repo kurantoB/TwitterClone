@@ -14,7 +14,11 @@ export class Post {
     @Index()
     author: User
 
-    @Column("varchar", { length: consts.MAX_POST_PREVIEW_LENGTH })
+    // can be null if the post is media only
+    @Column("varchar", {
+        length: consts.MAX_POST_PREVIEW_LENGTH,
+        nullable: true
+    })
     body: string
 
     // Do not select this when retrieving for the feed
