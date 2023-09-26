@@ -1,14 +1,14 @@
 import { IsNull } from "typeorm";
 import consts from "./consts";
-import { AppDataSource } from "./data-source";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
 import { Notification, NotificationType } from "./entity/Notification";
 import { Post } from "./entity/Post";
 import { User } from "./entity/User";
+import { AppDataSource } from "./data-source";
 
 export async function initialize() {
-    return await AppDataSource.initialize()
+    await AppDataSource.initialize()
 }
 
 

@@ -18,4 +18,7 @@ export const AppDataSource = new DataSource({
     entities: [FeedActivity, User, Post, Notification, DM],
     migrations: [],
     subscribers: [],
+    extra: {
+        poolSize: 2
+    }
 })
