@@ -13,5 +13,7 @@ export default {
     DAYS_OF_ACTIVITY_FOR_PUBLIC_FEED: 7,
 
     DELETED_DM_PLACEHOLDER: "[Deleted message]",
-    NUMBER_OF_RETRIEVABLE_DM_S: 500
+    NUMBER_OF_RETRIEVABLE_DM_S: 500,
+
+    CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars"
 }

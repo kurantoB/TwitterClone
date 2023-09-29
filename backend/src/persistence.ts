@@ -1,4 +1,4 @@
-import { IsNull } from "typeorm";
+import { EntityManager, IsNull } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -6,6 +6,7 @@ import { Notification, NotificationType } from "./entity/Notification";
 import { Post } from "./entity/Post";
 import { User } from "./entity/User";
 import { AppDataSource } from "./data-source";
+import { UserPostLimitExceededError } from "./errors";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -19,35 +20,56 @@ export async function getUser(googleid: string) {
     return await AppDataSource.getRepository(User).findOneBy({ googleid })
 }
 
-export async function insertUser(user: User) {
-    const userCount = await AppDataSource.getRepository(User).count()
-    if (userCount >= consts.MAX_USERS) {
-        throw new Error("Max users exceeded")
-    }
-    return await AppDataSource.getRepository(User).insert(user)
-}
-
-// make sure the old avatar is cleared from storage first, if there is an avatar update
-export async function updateUser(user: User) {
-    return await AppDataSource.getRepository(User).save(user)
-}
-
-// make sure the avatar is cleared from storage first
-export async function deleteUser(user: User) {
+export async function deleteUser(userId: string) {
     const dmsToDelete = await AppDataSource.getRepository(DM).find({
         where: [
             {
-                sender: { id: user.id },
+                sender: { id: userId },
                 recipient: IsNull()
             },
             {
                 sender: IsNull(),
-                recipient: { id: user.id }
+                recipient: { id: userId }
             }
         ]
     })
     await AppDataSource.getRepository(DM).remove(dmsToDelete)
-    return await AppDataSource.getRepository(User).remove(user)
+    return await AppDataSource.getRepository(User).delete(userId)
+}
+
+export async function transactionalGetUserCountIsAtLimit(em: EntityManager) {
+    return await em.count(User) === consts.MAX_USERS
+}
+
+export async function transactionalGetUser(em: EntityManager, userId: string) {
+    return await em.findOneBy(User, { id: userId })
+}
+
+export async function transactionalGetUsernameExists(em: EntityManager, username: string) {
+    return await em.find(User, {
+        where: { username }
+    }).then((users) => users.length > 0)
+}
+
+export async function transactionalSaveUser(em: EntityManager, user: User) {
+    em.save(User, user)
+}
+
+export async function deleteAndGetUserAvatar(userId: string) {
+    return await AppDataSource.getRepository(User).findOneBy({
+        id: userId
+    }).then(async (user) => {
+        const avatar = user.avatar
+        user.avatar = null
+        await AppDataSource.getRepository(User).save(user)
+        return avatar
+    })
+}
+
+export async function getUserAvatar(userId: string) {
+    return await AppDataSource.getRepository(User).findOneBy({
+        id: userId
+    }).then((user) => user.avatar)
 }
 
 
@@ -64,7 +86,7 @@ export async function postOrReply(
         where: { author: { id: user.id } }
     })
     if (userPostCount >= consts.MAX_POSTS_PER_USER) {
-        throw new Error("Max number of posts per user exceeded")
+        throw new UserPostLimitExceededError("Max number of posts per user exceeded")
     }
 
     const newPost = new Post()
@@ -493,6 +515,19 @@ async function makeFeedActivity(
             sourceUser, sourcePost, type
         })
     }
+}
+
+
+
+export async function doTransaction(transactionCall: (
+    entityManager: EntityManager) => Promise<void>
+    ) {
+    return await AppDataSource.manager.transaction(
+        "SERIALIZABLE",
+        async (transactionEntityManager: EntityManager) => {
+            await transactionCall(transactionEntityManager)
+        }
+    )
 }
 
 

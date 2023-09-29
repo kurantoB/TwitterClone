@@ -3,6 +3,13 @@ import { User } from "./entity/User"
 import { NotificationType } from "./entity/Notification"
 import { FeedActivityType } from "./entity/FeedActivity"
 import consts from "./consts"
+import { EntityManager } from 'typeorm'
+
+export async function insertTestUser(user: User) {
+    await Persistence.doTransaction(async (em: EntityManager) => {
+        await Persistence.transactionalSaveUser(em, user)
+    })
+}
 
 export default async function testDB() {
     const kurantoBID = "113542394053227098585"
@@ -17,7 +24,7 @@ export default async function testDB() {
     me.googleid = kurantoBID
     me.username = "kurantoB"
     me.bio = ""
-    await Persistence.insertUser(me)
+    await insertTestUser(me)
     console.log("\ninserted new user: " + JSON.stringify(me))
 
     // getUser
@@ -25,40 +32,25 @@ export default async function testDB() {
     console.log("\nloaded user: " + JSON.stringify(loadedMe))
 
     // deleteUser
-    await Persistence.deleteUser(loadedMe)
+    await Persistence.deleteUser(me.id)
     console.log("\ndeleted user " + kurantoBID)
     const deleteUserGetResult = await Persistence.getUser(kurantoBID)
     console.log("\ntry get kurantoB: " + JSON.stringify(deleteUserGetResult))
-
-    const saved_max_users = consts.MAX_USERS
-    consts.MAX_USERS = 1
-
-    // reinsert user
-    await Persistence.insertUser(me)
-    console.log("\ninserted new user: " + JSON.stringify(me))
-
-    const kurantoNoMichi: User = new User()
-    kurantoNoMichi.googleid = kurantoNoMichiID
-    kurantoNoMichi.username = "kurantoNoMichi"
-    kurantoNoMichi.bio = ""
-
-    try {
-        await Persistence.insertUser(kurantoNoMichi)
-    } catch (error) {
-        console.log(`\nCaught error: ${error}`)
-    }
-
-    consts.MAX_USERS = saved_max_users
 
     console.log("\n\n\n===FOLLOW, POST, LIKE, REPOST===")
 
     await Persistence.clearDB()
     console.log("\nDB cleared")
 
-    await Persistence.insertUser(me)
+    await insertTestUser(me)
     console.log("\ninserted post user: " + JSON.stringify(me))
 
-    await Persistence.insertUser(kurantoNoMichi)
+    const kurantoNoMichi: User = new User()
+    kurantoNoMichi.googleid = kurantoNoMichiID
+    kurantoNoMichi.username = "kurantoNoMichi"
+    kurantoNoMichi.bio = ""
+
+    await insertTestUser(kurantoNoMichi)
     console.log("\ninserted follower user: " + JSON.stringify(kurantoNoMichi))
 
     await Persistence.follow(kurantoNoMichi, me)
@@ -149,10 +141,10 @@ export default async function testDB() {
     const saved_number_of_retrievable_dm_s = consts.NUMBER_OF_RETRIEVABLE_DM_S
     consts.NUMBER_OF_RETRIEVABLE_DM_S = 2
 
-    await Persistence.insertUser(me)
+    await insertTestUser(me)
     console.log("\ninserted sender user: " + JSON.stringify(me))
 
-    await Persistence.insertUser(kurantoNoMichi)
+    await insertTestUser(kurantoNoMichi)
     console.log("\ninserted receiver user: " + JSON.stringify(kurantoNoMichi))
 
     const dm = await Persistence.sendDM(me, kurantoNoMichi, "Howdy")
@@ -199,13 +191,13 @@ export default async function testDB() {
     console.log("\nDM bank: " + JSON.stringify(dmBank))
 
     const savedDmSenderID = me.id
-    await Persistence.deleteUser(me)
+    await Persistence.deleteUser(me.id)
     console.log("\nDeleted user1")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, kurantoNoMichi.id)
     console.log("\nDM bank: " + JSON.stringify(dmBank))
 
     const savedDmRecipientID = kurantoNoMichi.id
-    await Persistence.deleteUser(kurantoNoMichi)
+    await Persistence.deleteUser(kurantoNoMichi.id)
     console.log("\nDeleted user2")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, savedDmRecipientID)
     console.log("\nDM bank: " + JSON.stringify(dmBank))

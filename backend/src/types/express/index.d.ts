@@ -5,7 +5,6 @@ declare global {
     namespace Express {
         export interface User {
             id?: string,
-            displayName: string
         }
 
         export interface Request {

@@ -30,8 +30,7 @@ export function ensureAuthenticated(req: Request, res: Response, next: NextFunct
     if (req.isAuthenticated()) {
         return next()
     }
-    // res.redirect('/login')
-    req.user ? next() : res.sendStatus(401) // unauthorized
+    res.sendStatus(401)
 }
 
 export default passport
