@@ -1,91 +1,97 @@
 import { User } from "./entity/User"
 import * as Persistence from "./persistence"
 import { EntityManager } from "typeorm"
-import { UserLimitExceededError, UsernameExistsError } from "./errors"
 import { Storage } from "@google-cloud/storage"
 import consts from "./consts"
-import path from "path"
 
 export async function accountExists(googleid: string): Promise<boolean> {
     return await Persistence.getUser(googleid) != null
 }
 
 export async function createOrUpdateAccount(
-    userId: string,
+    userId: string, // is null if this is account creation
     googleid: string,
     username: string,
     bio: string,
     avatarUploadFilename: string,
     isDeleteAvatar: boolean,
-    errors: Error[],
-    callback: () => void
+    errorPush: (error: Error) => void,
+    callback: (success: boolean) => void
 ) {
     try {
-        await createOrUpdateAccountHelper(userId, googleid, username, bio, errors)
+        await createOrUpdateAccountHelper(userId, googleid, username, bio)
+        // send the response back to the client before doing cloud storage operations
+        callback(true)
     } catch (error) {
-        errors.push(error)
+        errorPush(error)
+        callback(false)
+        return
     }
 
-    // send the response back to the client before doing cloud storage operations
-    callback()
-
+    let avatarFilename: string = null
     try {
         if (isDeleteAvatar) {
-            const avatarFilename = await Persistence.deleteAndGetUserAvatar(userId)
-            await deleteAvatarFromCloudStorage(avatarFilename)
+            const deleteAvatarFilename = await Persistence.deleteAndGetUserAvatar(userId)
+            await deleteAvatarFromCloudStorage(deleteAvatarFilename)
         }
         if (avatarUploadFilename) {
-            const extension = path.extname(avatarUploadFilename)
-            const avatarFilename = `${userId}/avatar${extension}`
-            const existingAvatar = await Persistence.getUserAvatar(userId)
+            avatarFilename = `${userId}/avatar`
             const storage = new Storage()
             const bucket = storage.bucket(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME)
-            if (existingAvatar !== avatarFilename) {
-                await bucket.file(existingAvatar).delete()
-            }
             await bucket.upload(avatarUploadFilename, { destination: avatarFilename })
         }
     } catch (error) {
         // TODO: report cloud storage errors
+        console.log(`Cloud storage error: ${error.message}`)
+    }
+
+    try {
+        if (avatarFilename) {
+            await Persistence.updateUserAvatar(userId, avatarFilename)
+        }
+    } catch (error) {
+        // TODO: report DB errors
+        console.log(`DB error: ${error.message}`)
     }
 }
 
 export async function deleteUser(
     userId: string,
-    errors: Error[],
-    callback: () => void
+    errorPush: (error: Error) => void,
+    callback: (success: boolean) => void
 ) {
     let avatarFilename
     try {
         avatarFilename = await Persistence.getUserAvatar(userId)
     } catch (error) {
-        errors.push(error)
+        errorPush(error)
     }
 
     try {
         await Persistence.deleteUser(userId)
+        // send the response back to the client before doing cloud storage operations
+        callback(true)
     } catch (error) {
-        errors.push(error)
+        errorPush(error)
+        callback(false)
+        return
     }
-
-    // send the response back to the client before doing cloud storage operations
-    callback()
 
     if (avatarFilename) {
         try {
             await deleteAvatarFromCloudStorage(avatarFilename)
         } catch (error) {
             // TODO: report cloud storage errors
+            console.log(`Cloud storage error: ${error.message}`)
         }
     }
 }
 
 async function createOrUpdateAccountHelper(
-    userId: string, // determines whether this is an insert or update
+    userId: string, // is null if this is account creation
     googleid: string,
     username: string,
-    bio: string,
-    errors: Error[]
+    bio: string
 ) {
     await Persistence.doTransaction(async (em: EntityManager) => {
         let user: User
@@ -94,23 +100,21 @@ async function createOrUpdateAccountHelper(
         } else {
             const userLimitExceeded = await Persistence.transactionalGetUserCountIsAtLimit(em)
             if (userLimitExceeded) {
-                throw new UserLimitExceededError("User limit exceeded.")
+                throw new Error("User limit exceeded.")
             }
             user = new User()
             user.googleid = googleid
         }
-        if (username) {
+        if (username !== user.username) {
             const alreadyExists = await Persistence.transactionalGetUsernameExists(em, username)
             if (alreadyExists) {
-                errors.push(new UsernameExistsError(`Unable to set username: ${username} is already taken.`))
+                throw new Error(`username/Unable to set username: ${username} is already taken.`)
             } else {
                 user.username = username
             }
         }
-        if (bio) {
-            user.bio = bio
-        }
-        Persistence.transactionalSaveUser(em, user)
+        user.bio = bio
+        await Persistence.transactionalSaveUser(em, user)
     })
 }
 

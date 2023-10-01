@@ -8,7 +8,8 @@ dotenv.config()
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    callbackURL: "https://localhost:8080/auth/google/callback",
+    // callbackURL: "https://localhost:8080/auth/google/callback",
+    callbackURL: "http://localhost:8080/auth/google/callback",
     passReqToCallback: true
 }, function (request: Request, accessToken: string, refreshToken: string, profile: any, done: VerifyCallback) {
     // User.findOrCreate({ googleId: profile.id }, function (err, user) {
@@ -30,6 +31,7 @@ export function ensureAuthenticated(req: Request, res: Response, next: NextFunct
     if (req.isAuthenticated()) {
         return next()
     }
+    req.session.destroy(_ => { })
     res.sendStatus(401)
 }
 

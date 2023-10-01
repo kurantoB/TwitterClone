@@ -6,7 +6,6 @@ import { Notification, NotificationType } from "./entity/Notification";
 import { Post } from "./entity/Post";
 import { User } from "./entity/User";
 import { AppDataSource } from "./data-source";
-import { UserPostLimitExceededError } from "./errors";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -17,7 +16,9 @@ export async function initialize() {
 // users
 
 export async function getUser(googleid: string) {
-    return await AppDataSource.getRepository(User).findOneBy({ googleid })
+    return await AppDataSource.
+        getRepository(User).
+        findOneBy({ googleid })
 }
 
 export async function deleteUser(userId: string) {
@@ -66,6 +67,15 @@ export async function deleteAndGetUserAvatar(userId: string) {
     })
 }
 
+export function updateUserAvatar(userId: string, avatarFilename: string) {
+    return AppDataSource.getRepository(User).findOneBy({
+        id: userId
+    }).then(async (user) => {
+        user.avatar = avatarFilename
+        return await AppDataSource.getRepository(User).save(user)
+    })
+}
+
 export async function getUserAvatar(userId: string) {
     return await AppDataSource.getRepository(User).findOneBy({
         id: userId
@@ -86,7 +96,7 @@ export async function postOrReply(
         where: { author: { id: user.id } }
     })
     if (userPostCount >= consts.MAX_POSTS_PER_USER) {
-        throw new UserPostLimitExceededError("Max number of posts per user exceeded")
+        throw new Error("Max number of posts per user exceeded")
     }
 
     const newPost = new Post()
