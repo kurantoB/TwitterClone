@@ -1,6 +1,4 @@
 import express from "express"
-import passport, { ensureAuthenticated } from './auth'
-import session from "express-session"
 import https from 'https'
 import fs from 'fs'
 import { initialize as initializePersistence } from "./persistence"
@@ -9,6 +7,7 @@ import getUserId from "./userGetter"
 import formidable from "formidable"
 import consts from "./consts"
 import path from "path"
+import { OAuth2Client } from "google-auth-library"
 // import testDB from "./dbtest"
 
 initializePersistence().then(async () => {
@@ -16,52 +15,59 @@ initializePersistence().then(async () => {
     startServer()
 })
 
+// Middleware to verify JWT tokens
+async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const authorizationHeader = req.headers.authorization
+    let errMsg: string
+    if (authorizationHeader) {
+        const token = authorizationHeader.split(' ')[1]
+        const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+        try {
+            const ticket = await client.verifyIdToken({
+                idToken: token,
+                audience: process.env.GOOGLE_CLIENT_ID
+            })
+            const payload = ticket.getPayload()
+            req.user = payload
+            return next()
+        } catch (error) {
+            errMsg = error.message
+        }
+    } else {
+        errMsg = "Failed to get authorization token"
+    }
+    return res.status(401).json({
+        userValidationError: true,
+        errMsg: errMsg
+    })
+}
+
 function startServer() {
     const app = express()
     const port = 8080
 
     app.use(express.json())
 
-    app.use(session({
-        secret: process.env.SESSION_SECRET,
-        resave: false,
-        saveUninitialized: true,
-        // cookie: { secure: true }
-        cookie: { secure: false }
-    }))
-    app.use(passport.initialize())
-    app.use(passport.session())
-
-    app.get('/auth/google',
-        passport.authenticate('google', {
-            scope: ['profile']
-        })
-    )
-
-    app.get('/auth/google/callback', passport.authenticate('google', {
-        successRedirect: '/auth/checkuser',
-        failureRedirect: '/auth/google/failure'
-    }))
-
-    app.get('/auth/google/failure', (_, res) => {
-        res.sendStatus(500)
-    })
-
-    app.use('/auth/logout', (req, res) => {
-        req.session.destroy(_ => { })
-        res.sendStatus(200)
+    app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+        if (err.name === "UnauthorizedError") {
+            res.status(401).json({
+                userValidationError: true,
+                errMsg: err.message
+            })
+        }
     })
 
     // { userExists: boolean } or error code 500
-    app.get('/auth/checkuser', ensureAuthenticated, async (req, res) => {
+    app.get('/auth/checkuser', verifyToken, async (req, res) => {
         await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
-            const googleid = req.user.id
+            const googleid = req.user.sub
             let hasUser: boolean = false
             try {
                 hasUser = await accountExists(googleid)
             } catch (error) {
                 errorPush(error)
                 callback(null)
+                return
             }
             if (hasUser) {
                 callback({ userExists: true })
@@ -72,9 +78,9 @@ function startServer() {
     })
 
     // { actionSuccess: boolean } or error code 500
-    app.post('/api/create-account', ensureAuthenticated, async (req, res) => {
+    app.post('/api/create-account', verifyToken, async (req, res) => {
         await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
-            const googleid = req.user.id
+            const googleid = req.user.sub
             let hasUser: boolean = false
             try {
                 hasUser = await accountExists(googleid)
@@ -91,7 +97,7 @@ function startServer() {
     })
 
     // { actionSuccess: boolean } or error code 500
-    app.patch('/api/update-account', ensureAuthenticated, async (req, res) => {
+    app.patch('/api/update-account', verifyToken, async (req, res) => {
         await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
             const userId = await validateUserId(req, res)
             if (!userId) {
@@ -102,7 +108,7 @@ function startServer() {
     })
 
     // { actionSuccess: boolean } or error code 500
-    app.delete('/api/delete-account', ensureAuthenticated, async (req, res) => {
+    app.delete('/api/delete-account', verifyToken, async (req, res) => {
         await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
             const userId = await validateUserId(req, res)
             if (!userId) {
@@ -116,7 +122,6 @@ function startServer() {
     })
 
     app.listen(port, () => {
-        // console.log(`server started at https://localhost:${port}`)
         console.log(`server started at http://localhost:${port}`)
     })
 
@@ -140,11 +145,13 @@ async function validateUserId(
     res: express.Response
 ) {
     try {
-        const userId = await getUserId(req.user.id)
+        const userId = await getUserId(req.user.sub)
         return userId
     } catch (error) {
-        req.session.destroy(_ => { })
-        res.status(401).json({ userValidationError: true })
+        res.status(401).json({
+            userValidationError: true,
+            errMsg: error
+        })
         return null
     }
 }
@@ -225,7 +232,7 @@ function handleCreateOrUpdateAccount(
 
         await createOrUpdateAccount(
             userId,
-            req.user.id,
+            req.user.sub,
             fields.username[0],
             fields.bio[0],
             files.avatar ? files.avatar[0].filepath : null,
