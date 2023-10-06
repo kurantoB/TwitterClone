@@ -6,6 +6,7 @@ import consts from "./consts"
 import { EntityManager } from 'typeorm'
 
 export async function insertTestUser(user: User) {
+    user.id = undefined
     await Persistence.doTransaction(async (em: EntityManager) => {
         await Persistence.transactionalSaveUser(em, user)
     })

@@ -4,29 +4,18 @@ import { EntityManager } from "typeorm"
 import { Storage } from "@google-cloud/storage"
 import consts from "./consts"
 
-export async function accountExists(googleid: string): Promise<boolean> {
-    return await Persistence.getUser(googleid) != null
-}
-
 export async function createOrUpdateAccount(
-    userId: string, // is null if this is account creation
+    userId: string, // is falsy if this is account creation
     googleid: string,
     username: string,
     bio: string,
     avatarUploadFilename: string,
     isDeleteAvatar: boolean,
-    errorPush: (error: Error) => void,
-    callback: (success: boolean) => void
+    callback: (responseVal: any) => void
 ) {
-    try {
-        await createOrUpdateAccountHelper(userId, googleid, username, bio)
-        // send the response back to the client before doing cloud storage operations
-        callback(true)
-    } catch (error) {
-        errorPush(error)
-        callback(false)
-        return
-    }
+    await createOrUpdateAccountHelper(userId, googleid, username, bio)
+    // send the response back to the client before doing cloud storage operations
+    callback(null)
 
     let avatarFilename: string = null
     try {
@@ -57,25 +46,13 @@ export async function createOrUpdateAccount(
 
 export async function deleteUser(
     userId: string,
-    errorPush: (error: Error) => void,
-    callback: (success: boolean) => void
+    callback: (responseVal: any) => void
 ) {
-    let avatarFilename
-    try {
-        avatarFilename = await Persistence.getUserAvatar(userId)
-    } catch (error) {
-        errorPush(error)
-    }
+    const avatarFilename = await Persistence.getUserAvatar(userId)
 
-    try {
-        await Persistence.deleteUser(userId)
-        // send the response back to the client before doing cloud storage operations
-        callback(true)
-    } catch (error) {
-        errorPush(error)
-        callback(false)
-        return
-    }
+    await Persistence.deleteUser(userId)
+    // send the response back to the client before doing cloud storage operations
+    callback(null)
 
     if (avatarFilename) {
         try {

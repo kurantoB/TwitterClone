@@ -2,13 +2,21 @@ import express from "express"
 import https from 'https'
 import fs from 'fs'
 import { initialize as initializePersistence } from "./persistence"
-import { accountExists, createOrUpdateAccount, deleteUser } from "./accountAPI"
+import { createOrUpdateAccount, deleteUser } from "./accountAPI"
 import getUserId from "./userGetter"
 import formidable from "formidable"
 import consts from "./consts"
 import path from "path"
 import { OAuth2Client } from "google-auth-library"
 // import testDB from "./dbtest"
+import { configDotenv } from "dotenv"
+
+/*
+Responses will be in the format { body }
+Requests that fail will be in the format { error }
+ */
+
+configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB()
@@ -17,6 +25,7 @@ initializePersistence().then(async () => {
 
 // Middleware to verify JWT tokens
 async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+    console.log(`VERIFYTOKEN REACHED - AUTHORIZATIONHEADER: ${JSON.stringify(req.headers.authorization)}`)
     const authorizationHeader = req.headers.authorization
     let errMsg: string
     if (authorizationHeader) {
@@ -37,87 +46,49 @@ async function verifyToken(req: express.Request, res: express.Response, next: ex
         errMsg = "Failed to get authorization token"
     }
     return res.status(401).json({
-        userValidationError: true,
-        errMsg: errMsg
+        error: errMsg
     })
 }
 
 function startServer() {
     const app = express()
-    const port = 8080
+    const port = process.env.PORT
 
     app.use(express.json())
 
-    app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-        if (err.name === "UnauthorizedError") {
-            res.status(401).json({
-                userValidationError: true,
-                errMsg: err.message
-            })
-        }
-    })
-
-    // { userExists: boolean } or error code 500
-    app.get('/auth/checkuser', verifyToken, async (req, res) => {
-        await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
+    // { userId: string }
+    app.get('/auth/get-user', verifyToken, async (req, res) => {
+        await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
             const googleid = req.user.sub
-            let hasUser: boolean = false
-            try {
-                hasUser = await accountExists(googleid)
-            } catch (error) {
-                errorPush(error)
-                callback(null)
-                return
-            }
-            if (hasUser) {
-                callback({ userExists: true })
-            } else {
-                callback({ userExists: false })
-            }
+            let userId: string = null
+            userId = await getUserId(googleid)
+            callback({ userId })
         })
     })
 
-    // { actionSuccess: boolean } or error code 500
     app.post('/api/create-account', verifyToken, async (req, res) => {
-        await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
+        await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
             const googleid = req.user.sub
-            let hasUser: boolean = false
-            try {
-                hasUser = await accountExists(googleid)
-                if (hasUser) {
-                    throw new Error("An account already exists for this Google ID.")
-                }
-            } catch (error) {
-                errorPush(error)
-                callback({ actionSuccess: false })
-                return
+            if (await getUserId(googleid)) {
+                throw new Error("An account already exists for this Google ID.")
             }
-            handleCreateOrUpdateAccount(req, errorPush, callback, null)
+            handleCreateOrUpdateAccount(req, callback, null)
         })
     })
 
-    // { actionSuccess: boolean } or error code 500
     app.patch('/api/update-account', verifyToken, async (req, res) => {
-        await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
-            const userId = await validateUserId(req, res)
-            if (!userId) {
-                return
-            }
-            handleCreateOrUpdateAccount(req, errorPush, callback, userId)
+        const errorCodeContext: StatusCodeContext = { code: 500 }
+        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
+            const userId = await validateUserId(req, res, errorCodeContext)
+            handleCreateOrUpdateAccount(req, callback, userId)
         })
     })
 
-    // { actionSuccess: boolean } or error code 500
     app.delete('/api/delete-account', verifyToken, async (req, res) => {
-        await wrapAPICall(500, req, res, async (req, errorPush, callback) => {
-            const userId = await validateUserId(req, res)
-            if (!userId) {
-                return
-            }
-
-            await deleteUser(userId, errorPush, (success: boolean) => {
-                callback({ actionSuccess: success })
-            })
+        const errorCodeContext: StatusCodeContext = { code: 500 }
+        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
+            const userId = await validateUserId(req, res, errorCodeContext)
+            await deleteUser(userId, callback)
         })
     })
 
@@ -142,50 +113,47 @@ function startServer() {
 
 async function validateUserId(
     req: express.Request,
-    res: express.Response
+    res: express.Response,
+    errorCodeContext: StatusCodeContext
 ) {
-    try {
-        const userId = await getUserId(req.user.sub)
-        return userId
-    } catch (error) {
-        res.status(401).json({
-            userValidationError: true,
-            errMsg: error
-        })
-        return null
+    const userId = await getUserId(req.user.sub)
+    if (!userId) {
+        errorCodeContext.code = 401 // unauthorized
+        throw new Error("Error - user validation failed.")
     }
+    return userId
 }
 
+type StatusCodeContext = {
+    code: number
+}
+
+// callback is only called upon success
 async function wrapAPICall(
-    errStatusCode: number,
+    errStatusCodeContext: StatusCodeContext,
     req: express.Request,
     res: express.Response,
     apiCall: (
         req: express.Request,
-        errorPush: (error: Error) => void,
         callback: (responseVal: any) => void
     ) => Promise<any>
 ) {
-    const errors: Error[] = []
-    await apiCall(req, (error) => {
-        errors.push(error)
-    }, (responseVal: any) => {
-        if (errors.length > 0) {
-            res.status(errStatusCode).json({
-                body: responseVal,
-                errors: errors.map((error) => error.message)
-            })
-        } else {
+    try {
+        await apiCall(req, (responseVal: any) => {
             res.status(200).json({ body: responseVal })
-        }
-    })
+        })
+    } catch (error) {
+        res.status(errStatusCodeContext.code).json({
+            error: error.message
+        })
+    }
 }
 
+// returns { formErrors }
 function handleCreateOrUpdateAccount(
     req: express.Request,
-    errorPush: (error: Error) => void,
     callback: (responseVal: any) => void,
-    userId: string, // is null if this is account creation
+    userId: string, // is falsy if this is account creation
 ) {
     const form = formidable({ multiples: false })
     form.parse(req, async (
@@ -194,18 +162,14 @@ function handleCreateOrUpdateAccount(
         files: Formidable.AccountFiles
     ) => {
         if (err) {
-            errorPush(new Error(`Failed to read account creation request: ${err.message}`))
-            callback({ actionSuccess: false })
-            return
+            throw new Error(`Failed to read account creation request: ${err.message}`)
         }
-        let hasFormError = false
+        const formErrors: string[] = []
         if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
-            errorPush(new Error(`username/User name must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`))
-            hasFormError = true
+            formErrors.push(`username/User name must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
         }
         if (fields.bio[0].length > consts.MAX_BIO_LENGTH) {
-            errorPush(new Error(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`))
-            hasFormError = true
+            formErrors.push(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
         }
 
         if (!(files.avatar) || files.avatar[0].size === 0) {
@@ -217,16 +181,14 @@ function handleCreateOrUpdateAccount(
             && path.extname(files.avatar[0].originalFilename) !== ".jpg"
             && path.extname(files.avatar[0].originalFilename) !== ".jpeg"
         ) {
-            errorPush(new Error(`avatar/Avatar file must be in PNG or JPEG format.`))
-            hasFormError = true
+            formErrors.push(`avatar/Avatar file must be in PNG or JPEG format.`)
         }
         if (files.avatar && files.avatar[0].size > consts.MAX_AVATAR_FILESIZE_BYTES) {
-            errorPush(new Error(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_BIO_LENGTH / 1024)} KB.`))
-            hasFormError = true
+            formErrors.push(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_BIO_LENGTH / 1024)} KB.`)
         }
 
-        if (hasFormError) {
-            callback({ actionSuccess: false })
+        if (formErrors.length > 0) {
+            callback({ formErrors })
             return
         }
 
@@ -236,11 +198,8 @@ function handleCreateOrUpdateAccount(
             fields.username[0],
             fields.bio[0],
             files.avatar ? files.avatar[0].filepath : null,
-            userId === null ? false : (fields.isDeleteAvatar ? true : false),
-            errorPush,
-            (success: boolean) => {
-                callback({ actionSuccess: success })
-            }
+            !userId ? false : (fields.isDeleteAvatar ? true : false),
+            callback
         )
     })
 }

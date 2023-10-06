@@ -531,7 +531,7 @@ async function makeFeedActivity(
 
 export async function doTransaction(transactionCall: (
     entityManager: EntityManager) => Promise<void>
-    ) {
+) {
     return await AppDataSource.manager.transaction(
         "SERIALIZABLE",
         async (transactionEntityManager: EntityManager) => {
