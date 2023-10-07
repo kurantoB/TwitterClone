@@ -47,7 +47,7 @@ export async function transactionalGetUser(em: EntityManager, userId: string) {
 }
 
 export async function transactionalGetUsernameExists(em: EntityManager, username: string) {
-    return await em.find(User, {
+    return em.find(User, {
         where: { username }
     }).then((users) => users.length > 0)
 }
@@ -57,7 +57,7 @@ export async function transactionalSaveUser(em: EntityManager, user: User) {
 }
 
 export async function deleteAndGetUserAvatar(userId: string) {
-    return await AppDataSource.getRepository(User).findOneBy({
+    return AppDataSource.getRepository(User).findOneBy({
         id: userId
     }).then(async (user) => {
         const avatar = user.avatar
@@ -77,7 +77,7 @@ export function updateUserAvatar(userId: string, avatarFilename: string) {
 }
 
 export async function getUserAvatar(userId: string) {
-    return await AppDataSource.getRepository(User).findOneBy({
+    return AppDataSource.getRepository(User).findOneBy({
         id: userId
     }).then((user) => user.avatar)
 }

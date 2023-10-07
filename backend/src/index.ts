@@ -2,14 +2,16 @@ import express from "express"
 import https from 'https'
 import fs from 'fs'
 import { initialize as initializePersistence } from "./persistence"
-import { createOrUpdateAccount, deleteUser } from "./accountAPI"
+import { createOrUpdateAccount, deleteUser } from "./api/accountAPI"
 import getUserId from "./userGetter"
 import formidable from "formidable"
 import consts from "./consts"
 import path from "path"
 import { OAuth2Client } from "google-auth-library"
-// import testDB from "./dbtest"
 import { configDotenv } from "dotenv"
+import cors from 'cors'
+import { getUserHasAvatar } from "./api/generalAPI"
+// import testDB from "./dbtest"
 
 /*
 Responses will be in the format { body }
@@ -25,7 +27,6 @@ initializePersistence().then(async () => {
 
 // Middleware to verify JWT tokens
 async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
-    console.log(`VERIFYTOKEN REACHED - AUTHORIZATIONHEADER: ${JSON.stringify(req.headers.authorization)}`)
     const authorizationHeader = req.headers.authorization
     let errMsg: string
     if (authorizationHeader) {
@@ -54,9 +55,9 @@ function startServer() {
     const app = express()
     const port = process.env.PORT
 
+    app.use(cors())
     app.use(express.json())
 
-    // { userId: string }
     app.get('/auth/get-user', verifyToken, async (req, res) => {
         await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
             const googleid = req.user.sub
@@ -89,6 +90,15 @@ function startServer() {
         await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
             const userId = await validateUserId(req, res, errorCodeContext)
             await deleteUser(userId, callback)
+        })
+    })
+
+    app.get('/has-avatar', verifyToken, async (req, res) => {
+        const errorCodeContext: StatusCodeContext = { code: 500 }
+        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
+            const userId = await validateUserId(req, res, errorCodeContext)
+            const hasAvatar = await getUserHasAvatar(userId)
+            callback({ hasAvatar })
         })
     })
 

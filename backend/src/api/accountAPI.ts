@@ -1,8 +1,8 @@
-import { User } from "./entity/User"
-import * as Persistence from "./persistence"
+import { User } from "../entity/User"
+import * as Persistence from "../persistence"
 import { EntityManager } from "typeorm"
 import { Storage } from "@google-cloud/storage"
-import consts from "./consts"
+import consts from "../consts"
 
 export async function createOrUpdateAccount(
     userId: string, // is falsy if this is account creation
