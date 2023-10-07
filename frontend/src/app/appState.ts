@@ -1,17 +1,19 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit"
 
 export type AppState = {
-    userUuid: string | null
+    tokenId: string | null
+    errorMessages: string[]
     websocket: any | null
     newNotifCount: number
-    userUuidToDMCount: { [userUuid: string]: number }
+    userIdToDMCount: { [userId: string]: number }
 }
 
 const initialState: AppState = {
-    userUuid: null,
+    tokenId: null,
+    errorMessages: [],
     websocket: null,
     newNotifCount: 0,
-    userUuidToDMCount: {}
+    userIdToDMCount: {}
 }
 
 const appState = createSlice({
@@ -19,13 +21,13 @@ const appState = createSlice({
     initialState,
     reducers: {
         login: (state, action: PayloadAction<string>) => {
-            state.userUuid = action.payload
+            state.tokenId = action.payload
         },
         logout: (state) => {
-            state.userUuid = null
+            state.tokenId = null
             state.websocket = null
             state.newNotifCount = 0
-            state.userUuidToDMCount = {}
+            state.userIdToDMCount = {}
         },
         connectSocket: (state, action: PayloadAction<any>) => {
             state.websocket = action.payload
@@ -40,12 +42,18 @@ const appState = createSlice({
             state.newNotifCount = 0
         },
         receiveDMsFromUser: (state, action: PayloadAction<[string, number]>) => {
-            let userUuid = action.payload[0]
-            state.userUuidToDMCount[userUuid]
-                = userUuid in state.userUuidToDMCount ? state.userUuidToDMCount[userUuid] + action.payload[1] : action.payload[1]
+            let userId = action.payload[0]
+            state.userIdToDMCount[userId]
+                = userId in state.userIdToDMCount ? state.userIdToDMCount[userId] + action.payload[1] : action.payload[1]
         },
         resetDMsFromUser: (state, action: PayloadAction<string>) => {
-            delete state.userUuidToDMCount[action.payload]
+            delete state.userIdToDMCount[action.payload]
+        },
+        addErrorMessage: (state, action: PayloadAction<string>) => {
+            state.errorMessages.push(action.payload)
+        },
+        removeErrorMessage: (state, action: PayloadAction<number>) => {
+            state.errorMessages = state.errorMessages.filter((_, index) => index !== action.payload)
         }
     }
 })
@@ -59,5 +67,7 @@ export const {
     receiveNotifications,
     resetNotifications,
     receiveDMsFromUser,
-    resetDMsFromUser
+    resetDMsFromUser,
+    addErrorMessage,
+    removeErrorMessage
 } = appState.actions
