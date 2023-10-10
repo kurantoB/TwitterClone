@@ -12,6 +12,10 @@ export async function insertTestUser(user: User) {
     })
 }
 
+export async function clearDB() {
+    await Persistence.clearDB()
+}
+
 export default async function testDB() {
     const kurantoBID = "113542394053227098585"
     const kurantoNoMichiID = "113011160176295257673";

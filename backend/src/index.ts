@@ -11,7 +11,7 @@ import { OAuth2Client } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
 import { getUserHasAvatar } from "./api/generalAPI"
-// import testDB from "./dbtest"
+import testDB, { clearDB } from "./dbtest"
 
 /*
 Responses will be in the format { body }
@@ -57,6 +57,13 @@ function startServer() {
 
     app.use(cors())
     app.use(express.json())
+
+    app.delete('/clear-db', async (req, res) => {
+        await wrapAPICall({ code: 500 }, req, res, async (_, callback) => {
+            await clearDB()
+            callback("OK")
+        })
+    })
 
     app.get('/auth/get-user', verifyToken, async (req, res) => {
         await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
@@ -146,7 +153,7 @@ async function wrapAPICall(
     apiCall: (
         req: express.Request,
         callback: (responseVal: any) => void
-    ) => Promise<any>
+    ) => Promise<void>
 ) {
     try {
         await apiCall(req, (responseVal: any) => {

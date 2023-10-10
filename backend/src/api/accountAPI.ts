@@ -15,7 +15,7 @@ export async function createOrUpdateAccount(
 ) {
     await createOrUpdateAccountHelper(userId, googleid, username, bio)
     // send the response back to the client before doing cloud storage operations
-    callback(null)
+    callback("OK")
 
     let avatarFilename: string = null
     try {
@@ -52,7 +52,7 @@ export async function deleteUser(
 
     await Persistence.deleteUser(userId)
     // send the response back to the client before doing cloud storage operations
-    callback(null)
+    callback("OK")
 
     if (avatarFilename) {
         try {
