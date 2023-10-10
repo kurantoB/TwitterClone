@@ -176,7 +176,7 @@ function handleCreateOrUpdateAccount(
         }
         const formErrors: string[] = []
         if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
-            formErrors.push(`username/User name must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
+            formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
         }
         if (fields.bio[0].length > consts.MAX_BIO_LENGTH) {
             formErrors.push(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
@@ -194,7 +194,7 @@ function handleCreateOrUpdateAccount(
             formErrors.push(`avatar/Avatar file must be in PNG or JPEG format.`)
         }
         if (files.avatar && files.avatar[0].size > consts.MAX_AVATAR_FILESIZE_BYTES) {
-            formErrors.push(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_BIO_LENGTH / 1024)} KB.`)
+            formErrors.push(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_AVATAR_FILESIZE_BYTES / 1024)} KB.`)
         }
 
         if (formErrors.length > 0) {
