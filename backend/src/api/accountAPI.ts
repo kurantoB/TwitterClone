@@ -3,6 +3,7 @@ import * as Persistence from "../persistence"
 import { EntityManager } from "typeorm"
 import { Storage } from "@google-cloud/storage"
 import consts from "../consts"
+import getUserId from "../userGetter"
 
 export async function createOrUpdateAccount(
     userId: string, // is falsy if this is account creation
@@ -24,7 +25,12 @@ export async function createOrUpdateAccount(
             await deleteAvatarFromCloudStorage(deleteAvatarFilename)
         }
         if (avatarUploadFilename) {
-            avatarFilename = `${userId}/avatar`
+            if (!userId) {
+                // Newly-created user ID
+                userId = await getUserId(googleid)
+            }
+
+            avatarFilename = `${userId}_avatar`
             const storage = new Storage()
             const bucket = storage.bucket(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME)
             await bucket.upload(avatarUploadFilename, { destination: avatarFilename })

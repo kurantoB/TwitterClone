@@ -9,9 +9,5 @@ declare global {
             bio: string[],
             isDeleteAvatar?: string[]
         }
-
-        export interface AccountFiles extends Files {
-            avatar?: formidable.File[]
-        }
     }
 }

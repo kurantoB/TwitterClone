@@ -4,9 +4,8 @@ import fs from 'fs'
 import { initialize as initializePersistence } from "./persistence"
 import { createOrUpdateAccount, deleteUser } from "./api/accountAPI"
 import getUserId from "./userGetter"
-import formidable from "formidable"
+import formidable, { Files } from "formidable"
 import consts from "./consts"
-import path from "path"
 import { OAuth2Client } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
@@ -176,7 +175,7 @@ function handleCreateOrUpdateAccount(
     form.parse(req, async (
         err,
         fields: Formidable.AccountFields,
-        files: Formidable.AccountFiles
+        files: Files
     ) => {
         if (err) {
             throw new Error(`Failed to read account creation request: ${err.message}`)
@@ -184,24 +183,21 @@ function handleCreateOrUpdateAccount(
         const formErrors: string[] = []
         if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
             formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
+        } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
+            formErrors.push("Only letters, numbers, and underscores are permitted in the handle.")
         }
         if (fields.bio[0].length > consts.MAX_BIO_LENGTH) {
             formErrors.push(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
         }
 
-        if (!(files.avatar) || files.avatar[0].size === 0) {
-            files.avatar = null
-        }
-        if (
-            files.avatar
-            && path.extname(files.avatar[0].originalFilename) !== ".png"
-            && path.extname(files.avatar[0].originalFilename) !== ".jpg"
-            && path.extname(files.avatar[0].originalFilename) !== ".jpeg"
-        ) {
-            formErrors.push(`avatar/Avatar file must be in PNG or JPEG format.`)
-        }
-        if (files.avatar && files.avatar[0].size > consts.MAX_AVATAR_FILESIZE_BYTES) {
-            formErrors.push(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_AVATAR_FILESIZE_BYTES / 1024)} KB.`)
+        if (files.file && files.file[0].size > 0) {
+            const uploadedFile = files.file[0]
+            if (uploadedFile.mimetype !== "image/png" && uploadedFile.mimetype !== "image/jpeg") {
+                formErrors.push(`avatar/Avatar file must be in PNG or JPEG format.`)
+            }
+            if (uploadedFile.size > consts.MAX_AVATAR_FILESIZE_BYTES) {
+                formErrors.push(`avatar/Avatar file size must not exceed ${Math.floor(consts.MAX_AVATAR_FILESIZE_BYTES / 1024)} KB.`)
+            }
         }
 
         if (formErrors.length > 0) {
@@ -209,12 +205,13 @@ function handleCreateOrUpdateAccount(
             return
         }
 
+        const uploadedFile = files.file ? files.file[0] : null
         await createOrUpdateAccount(
             userId,
             req.user.sub,
             fields.username[0],
             fields.bio[0],
-            files.avatar ? files.avatar[0].filepath : null,
+            uploadedFile ? uploadedFile.filepath : null,
             !userId ? false : (fields.isDeleteAvatar ? true : false),
             callback
         )

@@ -22,7 +22,6 @@
       "express": "^4.18.2",
       "formidable": "^3.5.1",
       "google-auth-library": "^9.1.0",
-      "path": "^0.12.7",
       "pg": "^8.4.0",
       "reflect-metadata": "^0.1.13",
       "typeorm": "0.3.17"
