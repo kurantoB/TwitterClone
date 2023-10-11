@@ -3,23 +3,10 @@ import Header from "../components/Header";
 import { useAppSelector, useAppDispatch } from "../app/hooks";
 import Sidebar from "../components/Sidebar";
 import { removeErrorMessage } from "../app/appState";
-import { useState } from "react";
-import doAPICall from "../app/apiLayer";
 
 export default function Root() {
     const errors = useAppSelector((state) => state.errorMessages)
-    const accessToken = useAppSelector((state) => state.tokenId)
-    const [userExists, setUserExists] = useState(false)
     const dispatch = useAppDispatch()
-    if (accessToken) {
-        doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
-            if (body.userId) {
-                setUserExists(true)
-            } else {
-                setUserExists(false)
-            }
-        })
-    }
 
     const closeError = (index: number) => {
         dispatch(removeErrorMessage(index))
@@ -29,7 +16,7 @@ export default function Root() {
         <>
             <Header />
             <div className="nonheader">
-                {accessToken && userExists ? <Sidebar /> : <div />}
+                <Sidebar />
                 <div className="middle">
                     <ul className="errors">
                         {errors && errors.map((message, index) => (

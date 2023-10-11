@@ -1,16 +1,16 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { useAppSelector, useAppDispatch } from "../app/hooks"
-import { addErrorMessage, login, logout } from "../app/appState"
+import { addErrorMessage, findUser, login, logout } from "../app/appState"
 import { GoogleLogin } from '@react-oauth/google'
 import connectSocket from "../app/socket"
 import doAPICall from "../app/apiLayer"
-import { useState } from "react"
 
 export default function Header() {
     const dispatch = useAppDispatch()
+    const navigate = useNavigate()
 
     const isLoggedIn = useAppSelector((state) => state.tokenId ? true : false)
-    const [userExists, setUserExists] = useState(false)
+    const userExists = useAppSelector((state) => state.userExists)
 
     const credentialResponse = (response: any) => {
         if (response && response.credential) {
@@ -18,7 +18,7 @@ export default function Header() {
             dispatch(login(accessToken))
             doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
                 if (body.userId) {
-                    setUserExists(true)
+                    dispatch(findUser())
                     // user account exists for this Google ID - connect to websocket service
                     connectSocket(body.userId, dispatch)
                 }
@@ -27,9 +27,12 @@ export default function Header() {
     }
 
     const navigateToCreateAccount = () => {
-        console.log("Navigate to Create Account")
-        // navigate to Create Account
-        dispatch(addErrorMessage("Create Account page isn't ready yet."))
+        navigate("/create-account")
+    }
+
+    const logoutAndNavigate = () => {
+        dispatch(logout())
+        navigate("")
     }
 
     return (
@@ -38,9 +41,14 @@ export default function Header() {
                 <img src="./images/logo.png"></img>
             </Link>
             <div className="header--right-group">
+                <button className="linkButton" onClick={() => {
+                    doAPICall("DELETE", "/clear-db", dispatch, null, (body) => {
+                        console.log("DB cleared")
+                    })
+                }}>Clear DB</button>
                 {isLoggedIn && !userExists && <button className="linkButton" onClick={navigateToCreateAccount}>Create Account</button>}
                 <div>
-                    {isLoggedIn ? <button className="linkButton" onClick={() => dispatch(logout())}>Logout</button> : <GoogleLogin
+                    {isLoggedIn ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
                         onSuccess={credentialResponse}
                         onError={() => {
                             dispatch(addErrorMessage("Error - unable to login."))

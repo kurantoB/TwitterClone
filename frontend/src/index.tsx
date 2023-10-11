@@ -7,6 +7,7 @@ import { Provider } from 'react-redux';
 import store from './app/store';
 import Home from './pages/Home'
 import { GoogleOAuthProvider } from '@react-oauth/google'
+import CreateAccount from './pages/CreateAccount';
 
 const router = createBrowserRouter([
   {
@@ -16,6 +17,10 @@ const router = createBrowserRouter([
       {
         path: "",
         element: <Home />
+      },
+      {
+        path: "create-account",
+        element: <CreateAccount />
       }
     ]
   }

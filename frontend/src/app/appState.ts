@@ -2,6 +2,7 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit"
 
 export type AppState = {
     tokenId: string | null
+    userExists: boolean
     errorMessages: string[]
     websocket: any | null
     newNotifCount: number
@@ -10,6 +11,7 @@ export type AppState = {
 
 const initialState: AppState = {
     tokenId: null,
+    userExists: false,
     errorMessages: [],
     websocket: null,
     newNotifCount: 0,
@@ -23,8 +25,12 @@ const appState = createSlice({
         login: (state, action: PayloadAction<string>) => {
             state.tokenId = action.payload
         },
+        findUser: (state) => {
+            state.userExists = true
+        },
         logout: (state) => {
             state.tokenId = null
+            state.userExists = false
             state.websocket = null
             state.newNotifCount = 0
             state.userIdToDMCount = {}
@@ -61,6 +67,7 @@ const appState = createSlice({
 export default appState.reducer
 export const {
     login,
+    findUser,
     logout,
     connectSocket,
     disconnectSocket,

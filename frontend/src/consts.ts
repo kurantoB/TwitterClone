@@ -1,3 +1,7 @@
 export default {
-    CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars"
+    MAX_USERNAME_LENGTH: 16,
+    MAX_AVATAR_FILESIZE_BYTES: 1048576,
+    MAX_BIO_LENGTH: 4200,
+
+    CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars",
 }

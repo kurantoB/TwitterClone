@@ -2,23 +2,33 @@ import { useDispatch } from "react-redux"
 import doAPICall from "../app/apiLayer"
 import { useAppSelector } from "../app/hooks"
 import consts from "../consts"
-import { useState } from 'react'
-import { addErrorMessage } from "../app/appState"
+import { useState, useEffect } from 'react'
+import { addErrorMessage, findUser } from "../app/appState"
 
 export default function Sidebar() {
     const dispatch = useDispatch()
     const accessToken = useAppSelector((state) => state.tokenId)
+    const userExists = useAppSelector((state) => state.userExists)
     const [avatarUrl, setAvatarUrl] = useState('images/user_icon.png')
 
-    doAPICall('GET', '/has-avatar', dispatch, accessToken, (body: any) => {
-        if (body.hasAvatar) {
-            doAPICall('GET', '/get-user', dispatch, accessToken, (body: any) => {
-                const filePath = `${body.userId}/avatar`
-                const fileURL = `https://storage.googleapis.com/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
-                setAvatarUrl(fileURL)
-            })
+    useEffect(() => {
+        if (!accessToken || !userExists) {
+            return
         }
-    })
+        doAPICall('GET', '/has-avatar', dispatch, accessToken, (body: any) => {
+            if (body.hasAvatar) {
+                doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
+                    const filePath = `${body.userId}_avatar`
+                    const fileURL = `https://storage.googleapis.com/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
+                    setAvatarUrl(fileURL)
+                })
+            }
+        })
+    }, [userExists])
+
+    if (!accessToken || !userExists) {
+        return <div></div>
+    }
 
     const navigateToProfile = () => {
         console.log("Navigate to Profile")
