@@ -5,16 +5,19 @@ import doAPICall from "../app/apiLayer"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { addErrorMessage, findUser } from "../app/appState"
 import connectSocket from "../app/socket"
+import DisplayCard from "../components/DisplayCard"
 
 export default function CreateAccount() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [username, setUsername] = useState<string>("")
     const [bio, setBio] = useState<string>("")
+    const [shortBio, setShortBio] = useState<string>("")
 
     const [previewImage, setPreviewImage] = useState<string | null>(null)
     const [avatarError, setAvatarError] = useState<string | null>(null)
     const [usernameError, setUsernameError] = useState<string | null>(null)
     const [bioError, setBioError] = useState<string | null>(null)
+    const [shortBioError, setShortBioError] = useState<string | null>(null)
 
     const dispatch = useAppDispatch()
     const accessToken = useAppSelector((state) => state.tokenId)
@@ -51,6 +54,7 @@ export default function CreateAccount() {
         }
         formData.append('username', username)
         formData.append('bio', bio)
+        formData.append('shortBio', shortBio)
 
         doAPICall(
             "POST",
@@ -138,6 +142,15 @@ export default function CreateAccount() {
         }
     }
 
+    const handleShortBioChange = (event: ChangeEvent<HTMLInputElement>) => {
+        setShortBio(event.target.value)
+        if (event.target.value.length > consts.MAX_SHORT_BIO_LENGTH) {
+            setShortBioError(`Caption must not exceed ${consts.MAX_SHORT_BIO_LENGTH} characters.`)
+        } else {
+            setShortBioError(null)
+        }
+    }
+
     const handleBioChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
         setBio(event.target.value)
         if (event.target.value.length > consts.MAX_BIO_LENGTH) {
@@ -152,9 +165,11 @@ export default function CreateAccount() {
             <h1>Tell us about yourself</h1>
             <form onSubmit={handleFormSubmit} className="create-account--form" >
                 <div>
-                    <div className="avatar-container-big">
-                        <img src={previewImage ? previewImage : './images/user_icon.png'} />
-                    </div>
+                    <DisplayCard
+                        avatarImage={previewImage}
+                        username={username}
+                        shortBio={shortBio}
+                    />
                     <label className="create-account--smallcaption" htmlFor="avatar">Upload Avatar:</label>
                     <input
                         type="file"
@@ -167,13 +182,22 @@ export default function CreateAccount() {
                 </div>
                 <hr />
                 <div>
-                    <h2>Choose a handle</h2>
-                    <input type="text" name="username" onChange={handleUsernameChange} value={username} />
-                    {usernameError && <p className="create-account--error">{usernameError}</p>}
+                    <div className="create-account--smallinputs">
+                        <div>
+                            <h2>Choose a handle</h2>
+                            <input type="text" name="username" onChange={handleUsernameChange} value={username} />
+                            {usernameError && <p className="create-account--error">{usernameError}</p>}
+                        </div>
+                        <div>
+                            <h2>Write a caption</h2>
+                            <input className="create-account--captioninput" type="text" name="shortBio" onChange={handleShortBioChange} value={shortBio} />
+                            {shortBioError && <p className="create-account--error">{shortBioError}</p>}
+                        </div>
+                    </div>
                 </div>
                 <hr />
                 <div>
-                    <h2>Build a profile page</h2>
+                    <h2>Build a profile</h2>
                     <p className="create-account--smallcaption">Markdown input (<a href="https://en.wikipedia.org/wiki/Markdown#Examples">?</a>)</p>
                     <p className="create-account--smallcaption">(Links and images not supported)</p>
                     <div className="create-account--textarea-container">

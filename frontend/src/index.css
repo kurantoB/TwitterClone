@@ -157,6 +157,7 @@ code {
 .avatar-container-big {
   width: 128px;
   height: 128px;
+  margin: auto;
 }
 
 .avatar-container-big>img {
@@ -166,6 +167,38 @@ code {
   object-fit: cover;
   object-position: center center;
   clip-path: circle();
+}
+
+.display-card {
+  border-width: 3px;
+  border-style: solid;
+  padding: 20px 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 250px;
+}
+
+.display-card--left {
+  width: 171px;
+  min-width: 171px;
+}
+
+.display-card--handle {
+  padding-block: 10px;
+  font-weight: bold;
+  color: #66aaf7;
+}
+
+.display-card--caption {
+  padding: 10px;
+  width: 209px;
+}
+
+.display-card--caption p {
+  text-align: left;
+  word-wrap: break-word;
+  width: 100%;
 }
 
 .markdown-renderer {
@@ -209,7 +242,7 @@ code {
   flex-direction: column;
   align-items: stretch;
   text-align: center;
-  margin: 0 32px;
+  padding: 0 32px;
 }
 
 .create-account--error {
@@ -227,6 +260,20 @@ code {
   margin: 32px 0;
 }
 
+.create-account--smallinputs {
+  display: flex;
+  flex-direction: row;
+}
+
+.create-account--smallinputs > div {
+  padding: 0 40px;
+}
+
+.create-account--captioninput {
+  width: 400px;
+  text-align: left;
+}
+
 .create-account--smallcaption {
   margin: 0;
 }
@@ -236,7 +283,10 @@ code {
   font-size: 1rem;
   color: white;
   background-color: black;
-  text-align: center;
+}
+
+.create-account--form input:not(.create-account--captioninput) {
+  text-align: center
 }
 
 .create-account--textarea-container {
