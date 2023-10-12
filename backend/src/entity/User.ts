@@ -14,15 +14,14 @@ export class User {
     @Index( {unique: true })
     username: string
 
-    @Column({
-        nullable: true
-    })
+    @Column({ nullable: true })
     avatar: string
 
-    @Column({
-        type: "text",
-    })
+    @Column({ type: "text" })
     bio: string
+
+    @Column({ length: consts.MAX_SHORT_BIO_LENGTH })
+    shortBio: string
 
     @ManyToMany(
         () => User,
@@ -37,6 +36,24 @@ export class User {
         { cascade: true }
     )
     following: User[]
+
+    @Column({
+        type: "int",
+        default: 0
+    })
+    followerCount: number
+
+    @Column({
+        type: "int",
+        default: 0
+    })
+    followingCount: number
+
+    @Column({
+        type: "int",
+        default: 0
+    })
+    mutualCount: number
 
     @ManyToMany(() => User)
     @JoinTable()

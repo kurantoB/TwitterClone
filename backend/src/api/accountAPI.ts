@@ -1,6 +1,4 @@
-import { User } from "../entity/User"
 import * as Persistence from "../persistence"
-import { EntityManager } from "typeorm"
 import { Storage } from "@google-cloud/storage"
 import consts from "../consts"
 import getUserId from "../userGetter"
@@ -10,11 +8,12 @@ export async function createOrUpdateAccount(
     googleid: string,
     username: string,
     bio: string,
+    shortBio: string,
     avatarUploadFilename: string,
     isDeleteAvatar: boolean,
     callback: (responseVal: any) => void
 ) {
-    await createOrUpdateAccountHelper(userId, googleid, username, bio)
+    await Persistence.createOrUpdateAccountHelper(userId, googleid, username, bio, shortBio)
     // send the response back to the client before doing cloud storage operations
     callback("OK")
 
@@ -68,37 +67,6 @@ export async function deleteUser(
             console.log(`Cloud storage error: ${error.message}`)
         }
     }
-}
-
-async function createOrUpdateAccountHelper(
-    userId: string, // is null if this is account creation
-    googleid: string,
-    username: string,
-    bio: string
-) {
-    await Persistence.doTransaction(async (em: EntityManager) => {
-        let user: User
-        if (userId) {
-            user = await Persistence.transactionalGetUser(em, userId)
-        } else {
-            const userLimitExceeded = await Persistence.transactionalGetUserCountIsAtLimit(em)
-            if (userLimitExceeded) {
-                throw new Error("User limit exceeded.")
-            }
-            user = new User()
-            user.googleid = googleid
-        }
-        if (username !== user.username) {
-            const alreadyExists = await Persistence.transactionalGetUsernameExists(em, username)
-            if (alreadyExists) {
-                throw new Error(`username/Unable to set username: ${username} is already taken.`)
-            } else {
-                user.username = username
-            }
-        }
-        user.bio = bio
-        await Persistence.transactionalSaveUser(em, user)
-    })
 }
 
 async function deleteAvatarFromCloudStorage(avatarFilename: string) {

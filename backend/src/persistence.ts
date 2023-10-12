@@ -38,22 +38,39 @@ export async function deleteUser(userId: string) {
     return await AppDataSource.getRepository(User).delete(userId)
 }
 
-export async function transactionalGetUserCountIsAtLimit(em: EntityManager) {
-    return await em.count(User) === consts.MAX_USERS
-}
-
-export async function transactionalGetUser(em: EntityManager, userId: string) {
-    return await em.findOneBy(User, { id: userId })
-}
-
-export async function transactionalGetUsernameExists(em: EntityManager, username: string) {
-    return em.find(User, {
-        where: { username }
-    }).then((users) => users.length > 0)
-}
-
-export async function transactionalSaveUser(em: EntityManager, user: User) {
-    em.save(User, user)
+export async function createOrUpdateAccountHelper(
+    userId: string, // is null if this is account creation
+    googleid: string,
+    username: string,
+    bio: string,
+    shortBio: string,
+) {
+    await doTransaction(async (em: EntityManager) => {
+        let user: User
+        if (userId) {
+            user = await em.findOneBy(User, { id: userId })
+        } else {
+            const userLimitExceeded = await em.count(User) === consts.MAX_USERS
+            if (userLimitExceeded) {
+                throw new Error("User limit exceeded.")
+            }
+            user = new User()
+            user.googleid = googleid
+        }
+        if (username !== user.username) {
+            const alreadyExists = await em.find(User, {
+                where: { username }
+            }).then((users) => users.length > 0)
+            if (alreadyExists) {
+                throw new Error(`username/Unable to set username: ${username} is already taken.`)
+            } else {
+                user.username = username
+            }
+        }
+        user.bio = bio
+        user.shortBio = shortBio
+        await em.save(User, user)
+    })
 }
 
 export async function deleteAndGetUserAvatar(userId: string) {
@@ -291,19 +308,47 @@ export async function followHook(sourceUser: User, targetUser: User, action: boo
     )
 }
 
-export async function handleFollow({ id }: User, targetUser: User, action: boolean) {
-    const loadedSourceUser = await AppDataSource.getRepository(User).findOne({
-        relations: { following: true },
-        where: { id }
-    })
-    if (action) {
-        if (loadedSourceUser.following.filter((user) => user.id === targetUser.id).length === 0) {
-            loadedSourceUser.following.push(targetUser)
+export async function handleFollow(sourceUser: User, targetUser: User, action: boolean) {
+    await doTransaction(async (em) => {
+        const loadedSourceUser = await em.findOne(User, {
+            relations: {
+                following: true,
+                followers: true
+            },
+            where: { id: sourceUser.id }
+        })
+
+        let mutualDelta = 0
+        if (action) {
+            if (
+                loadedSourceUser.following.length == 0
+                || loadedSourceUser.following.filter((user) => user.id === targetUser.id).length === 0
+            ) {
+                loadedSourceUser.following.push(targetUser)
+            }
+            if (loadedSourceUser.followers.map((user) => user.id).indexOf(targetUser.id) !== -1) {
+                mutualDelta = 1
+            }
+        } else {
+            loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUser.id)
+            if (loadedSourceUser.followers.map((user) => user.id).indexOf(targetUser.id) !== -1) {
+                mutualDelta = -1
+            }
         }
-    } else {
-        loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUser.id)
-    }
-    return await AppDataSource.getRepository(User).save(loadedSourceUser)
+        loadedSourceUser.followingCount = loadedSourceUser.following.length
+        loadedSourceUser.mutualCount += mutualDelta
+        await em.save(User, loadedSourceUser)
+
+        const loadedTargetUser = await em.findOne(User, {
+            relations: {
+                followers: true
+            },
+            where: { id: targetUser.id }
+        })
+        loadedTargetUser.followerCount = loadedTargetUser.followers.length
+        loadedTargetUser.mutualCount += mutualDelta
+        await em.save(User, loadedTargetUser)
+    })
 }
 
 export async function getFollowers(user: User) {

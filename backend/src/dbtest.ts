@@ -3,214 +3,229 @@ import { User } from "./entity/User"
 import { NotificationType } from "./entity/Notification"
 import { FeedActivityType } from "./entity/FeedActivity"
 import consts from "./consts"
-import { EntityManager } from 'typeorm'
-
-export async function insertTestUser(user: User) {
-    user.id = undefined
-    await Persistence.doTransaction(async (em: EntityManager) => {
-        await Persistence.transactionalSaveUser(em, user)
-    })
-}
 
 export async function clearDB() {
     await Persistence.clearDB()
 }
 
+const doLogging = true
+function conditionalLog(msg: string) {
+    if (doLogging) {
+        console.log(`\n${msg}`)
+    }
+}
+
 export default async function testDB() {
     const kurantoBID = "113542394053227098585"
     const kurantoNoMichiID = "113011160176295257673";
+    let me: User
+    let kurantoNoMichi: User
 
-    console.log("\n\n\n===USER===")
+    conditionalLog("\n\n===USER===")
 
     await Persistence.clearDB()
-    console.log("\nDB cleared")
+    conditionalLog("DB cleared")
 
-    const me: User = new User()
-    me.googleid = kurantoBID
-    me.username = "kurantoB"
-    me.bio = ""
-    await insertTestUser(me)
-    console.log("\ninserted new user: " + JSON.stringify(me))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog("inserted new user: " + JSON.stringify(me))
 
     // getUser
     const loadedMe = await Persistence.getUser(kurantoBID)
-    console.log("\nloaded user: " + JSON.stringify(loadedMe))
+    conditionalLog("loaded user: " + JSON.stringify(loadedMe))
 
     // deleteUser
     await Persistence.deleteUser(me.id)
-    console.log("\ndeleted user " + kurantoBID)
+    conditionalLog("deleted user " + kurantoBID)
     const deleteUserGetResult = await Persistence.getUser(kurantoBID)
-    console.log("\ntry get kurantoB: " + JSON.stringify(deleteUserGetResult))
+    conditionalLog("try get kurantoB: " + JSON.stringify(deleteUserGetResult))
 
-    console.log("\n\n\n===FOLLOW, POST, LIKE, REPOST===")
+    conditionalLog("\n\n===FOLLOW, POST, LIKE, REPOST===")
 
     await Persistence.clearDB()
-    console.log("\nDB cleared")
+    conditionalLog("DB cleared")
 
-    await insertTestUser(me)
-    console.log("\ninserted post user: " + JSON.stringify(me))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog("inserted post user: " + JSON.stringify(me))
 
-    const kurantoNoMichi: User = new User()
-    kurantoNoMichi.googleid = kurantoNoMichiID
-    kurantoNoMichi.username = "kurantoNoMichi"
-    kurantoNoMichi.bio = ""
-
-    await insertTestUser(kurantoNoMichi)
-    console.log("\ninserted follower user: " + JSON.stringify(kurantoNoMichi))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "")
+    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    conditionalLog("inserted follower user: " + JSON.stringify(kurantoNoMichi))
 
     await Persistence.follow(kurantoNoMichi, me)
-    console.log("\nFollow done")
+    conditionalLog("Follow done")
     const postUserFollowers = await Persistence.getFollowers(me)
-    console.log("\nPost user followers: " + JSON.stringify(postUserFollowers))
+    conditionalLog("Post user followers: " + JSON.stringify(postUserFollowers))
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
     const followerUserFollowing = await Persistence.getFollowing(kurantoNoMichi)
-    console.log("\nFollower user following: " + JSON.stringify(followerUserFollowing))
+    conditionalLog("Follower user following: " + JSON.stringify(followerUserFollowing))
+    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
     const followNotif = await Persistence.followHook(kurantoNoMichi, me, true)
-    console.log("\ninserted new follow notification: " + JSON.stringify(followNotif))
+    conditionalLog("inserted new follow notification: " + JSON.stringify(followNotif))
 
+    await Persistence.follow(me, kurantoNoMichi)
+    conditionalLog("Follow-back done")
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
+    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
+
+    await Persistence.unfollow(me, kurantoNoMichi)
+    conditionalLog("Undo follow-back done")
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
+    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
+    
     const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.")
-    console.log("\nInserted new post: " + JSON.stringify(newPost))
+    conditionalLog("Inserted new post: " + JSON.stringify(newPost))
     const newPostFeedActivity = await Persistence.postOrReplyHook(newPost)
-    console.log("\nInserted new post feed activity: " + JSON.stringify(newPostFeedActivity))
+    conditionalLog("Inserted new post feed activity: " + JSON.stringify(newPostFeedActivity))
 
     await Persistence.likePost(kurantoNoMichi, newPost)
-    console.log("\nLike done")
+    conditionalLog("Like done")
     const newPostLikes = await Persistence.getPostLikes(newPost)
-    console.log("\nNew post likes: " + JSON.stringify(newPostLikes.map((user) => user.id)))
+    conditionalLog("New post likes: " + JSON.stringify(newPostLikes.map((user) => user.id)))
     const newLikeFeedActivity = await Persistence.likePostHook(kurantoNoMichi, newPost, true)
-    console.log("\nInserted new like feed activity: " + JSON.stringify(newLikeFeedActivity))
+    conditionalLog("Inserted new like feed activity: " + JSON.stringify(newLikeFeedActivity))
     const likeNotif = await Persistence.getNotification(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    console.log("\nTry get new like notification: " + JSON.stringify(likeNotif))
+    conditionalLog("Try get new like notification: " + JSON.stringify(likeNotif))
 
     await Persistence.unlikePost(kurantoNoMichi, newPost)
-    console.log("\nUnlike done")
+    conditionalLog("Unlike done")
     await Persistence.likePostHook(kurantoNoMichi, newPost, false)
-    console.log("\nUnlike hook done")
+    conditionalLog("Unlike hook done")
     const newNewPostLikes = await Persistence.getPostLikes(newPost)
-    console.log("\nNew post likes: " + JSON.stringify(newNewPostLikes.map((user) => user.id)))
+    conditionalLog("New post likes: " + JSON.stringify(newNewPostLikes.map((user) => user.id)))
     const newNewLikeFeedActivity = await Persistence.getFeedActivity(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    console.log("\nTry get new like feed activity: " + JSON.stringify(newNewLikeFeedActivity))
+    conditionalLog("Try get new like feed activity: " + JSON.stringify(newNewLikeFeedActivity))
     const newLikeNotif = await Persistence.getNotification(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    console.log("\nTry get new like notification: " + JSON.stringify(newLikeNotif))
+    conditionalLog("Try get new like notification: " + JSON.stringify(newLikeNotif))
 
     await Persistence.repostPost(kurantoNoMichi, newPost)
-    console.log("\nRepost done")
+    conditionalLog("Repost done")
     const newPostReposts = await Persistence.getPostReposts(newPost)
-    console.log("\nNew post reposts: " + JSON.stringify(newPostReposts.map((user) => user.id)))
+    conditionalLog("New post reposts: " + JSON.stringify(newPostReposts.map((user) => user.id)))
     const newRepostFeedActivity = await Persistence.repostHook(kurantoNoMichi, newPost, true)
-    console.log("\nInserted new repost feed activity: " + JSON.stringify(newRepostFeedActivity))
+    conditionalLog("Inserted new repost feed activity: " + JSON.stringify(newRepostFeedActivity))
     const repostNotif = await Persistence.getNotification(me, NotificationType.REPOST, newPost, kurantoNoMichi)
-    console.log("\nTry get new repost notification: " + JSON.stringify(repostNotif))
+    conditionalLog("Try get new repost notification: " + JSON.stringify(repostNotif))
 
     await Persistence.unrepostPost(kurantoNoMichi, newPost)
-    console.log("\nUnrepost done")
+    conditionalLog("Unrepost done")
     await Persistence.repostHook(kurantoNoMichi, newPost, false)
-    console.log("\nUnrepost hook done")
+    conditionalLog("Unrepost hook done")
     const newNewPostReposts = await Persistence.getPostReposts(newPost)
-    console.log("\nNew post reposts: " + JSON.stringify(newNewPostReposts.map((user) => user.id)))
+    conditionalLog("New post reposts: " + JSON.stringify(newNewPostReposts.map((user) => user.id)))
     const newNewRepostFeedActivity = await Persistence.getFeedActivity(kurantoNoMichi, newPost, FeedActivityType.REPOST)
-    console.log("\nTry get new repost feed activity: " + JSON.stringify(newNewRepostFeedActivity))
+    conditionalLog("Try get new repost feed activity: " + JSON.stringify(newNewRepostFeedActivity))
     const newRepostNotif = await Persistence.getNotification(me, NotificationType.REPOST, newPost, kurantoNoMichi)
-    console.log("\nTry get new repost notification: " + JSON.stringify(newRepostNotif))
+    conditionalLog("Try get new repost notification: " + JSON.stringify(newRepostNotif))
 
     await Persistence.likePost(kurantoNoMichi, newPost)
-    console.log("\nRelike done")
+    conditionalLog("Relike done")
 
     const newReply = await Persistence.postOrReply(
         kurantoNoMichi,
         "This is a very long reply that should exceed the number of characters alloted to the preview. I think it's supposed to be 420, which is symbolic because Twitter started off with 140, then got extended to 280. It's only natural that we go to 420 from here. 420, you say. I know what you're thinking, but hold that thought. Wow, the 420 char limit is longer than I thought. How am I still not done? Well, in any case, I'm hopeful you peeps will make good use of all this space.",
         newPost)
-    console.log("\nInserted new reply: " + JSON.stringify(newReply))
+    conditionalLog("Inserted new reply: " + JSON.stringify(newReply))
     const newReplyFeedActivity = await Persistence.postOrReplyHook(newReply, newPost)
-    console.log("\nInserted new reply feed activity: " + JSON.stringify(newReplyFeedActivity))
+    conditionalLog("Inserted new reply feed activity: " + JSON.stringify(newReplyFeedActivity))
     const newReplyNotif = await Persistence.getNotification(me, NotificationType.REPLY, newReply, kurantoNoMichi)
-    console.log("\nTry get new reply notification: " + JSON.stringify(newReplyNotif))
+    conditionalLog("Try get new reply notification: " + JSON.stringify(newReplyNotif))
 
     const deletedParentPost = await Persistence.deletePost(newPost)
-    console.log("\nDeleted parent post: " + JSON.stringify(deletedParentPost))
+    conditionalLog("Deleted parent post: " + JSON.stringify(deletedParentPost))
     const currentReply = await Persistence.getPostByID(newReply.id)
-    console.log("\nTry get reply: " + JSON.stringify(currentReply))
+    conditionalLog("Try get reply: " + JSON.stringify(currentReply))
     const deletedParentPostFeedActivity = await Persistence.getFeedActivity(me, newPost, FeedActivityType.POST)
-    console.log("\nTry get parent post feed activity: " + JSON.stringify(deletedParentPostFeedActivity))
+    conditionalLog("Try get parent post feed activity: " + JSON.stringify(deletedParentPostFeedActivity))
     const deletedParentPostLikeFeedActivity = await Persistence.getFeedActivity(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    console.log("\nTry get parent post like feed activity: " + JSON.stringify(deletedParentPostLikeFeedActivity))
+    conditionalLog("Try get parent post like feed activity: " + JSON.stringify(deletedParentPostLikeFeedActivity))
     const deletedParentPostLikeNotification = await Persistence.getNotification(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    console.log("\nTry get parent post like notification: " + JSON.stringify(deletedParentPostLikeNotification))
+    conditionalLog("Try get parent post like notification: " + JSON.stringify(deletedParentPostLikeNotification))
     const deletedParentPostReplyNotification = await Persistence.getNotification(me, NotificationType.REPLY, newReply, kurantoNoMichi)
-    console.log("\nTry get parent post new reply notification: " + JSON.stringify(deletedParentPostReplyNotification))
+    conditionalLog("Try get parent post new reply notification: " + JSON.stringify(deletedParentPostReplyNotification))
 
-    console.log("\n\n\n===DM===")
+    conditionalLog("\n\n===DM===")
 
     await Persistence.clearDB()
-    console.log("\nDB cleared")
+    conditionalLog("DB cleared")
 
     const saved_number_of_retrievable_dm_s = consts.NUMBER_OF_RETRIEVABLE_DM_S
     consts.NUMBER_OF_RETRIEVABLE_DM_S = 2
 
-    await insertTestUser(me)
-    console.log("\ninserted sender user: " + JSON.stringify(me))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
+    me = await Persistence.getUser(kurantoBID)
+    conditionalLog("inserted sender user: " + JSON.stringify(me))
 
-    await insertTestUser(kurantoNoMichi)
-    console.log("\ninserted receiver user: " + JSON.stringify(kurantoNoMichi))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "")
+    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    conditionalLog("inserted receiver user: " + JSON.stringify(kurantoNoMichi))
 
     const dm = await Persistence.sendDM(me, kurantoNoMichi, "Howdy")
-    console.log("\nuser1 sent DM: " + JSON.stringify(dm))
+    conditionalLog("user1 sent DM: " + JSON.stringify(dm))
     let dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm2 = await Persistence.sendDM(kurantoNoMichi, me, "Yo")
-    console.log("\nuser2 sent DM: " + JSON.stringify(dm2))
+    conditionalLog("user2 sent DM: " + JSON.stringify(dm2))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm3 = await Persistence.sendDM(me, kurantoNoMichi, "Howdy howdy")
-    console.log("\nuser1 sent DM: " + JSON.stringify(dm3))
+    conditionalLog("user1 sent DM: " + JSON.stringify(dm3))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm4 = await Persistence.sendDM(kurantoNoMichi, me, "What is it?")
-    console.log("\nuser2 sent DM: " + JSON.stringify(dm4))
+    conditionalLog("user2 sent DM: " + JSON.stringify(dm4))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm5 = await Persistence.sendDM(kurantoNoMichi, me, "Speak up")
-    console.log("\nuser2 sent DM: " + JSON.stringify(dm5))
+    conditionalLog("user2 sent DM: " + JSON.stringify(dm5))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm6 = await Persistence.sendDM(me, kurantoNoMichi, "Nothing")
-    console.log("\nuser1 sent DM: " + JSON.stringify(dm6))
+    conditionalLog("user1 sent DM: " + JSON.stringify(dm6))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const dm7 = await Persistence.sendDM(me, kurantoNoMichi, "Bye")
-    console.log("\nuser1 sent DM: " + JSON.stringify(dm7))
+    conditionalLog("user1 sent DM: " + JSON.stringify(dm7))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     await Persistence.deleteDM(dm)
     await Persistence.deleteDM(dm3)
     await Persistence.deleteDM(dm6)
     await Persistence.deleteDM(dm7)
-    console.log("\nUser 1 deleted all DMs.")
+    conditionalLog("User 1 deleted all DMs.")
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const savedDmSenderID = me.id
     await Persistence.deleteUser(me.id)
-    console.log("\nDeleted user1")
+    conditionalLog("Deleted user1")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, kurantoNoMichi.id)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     const savedDmRecipientID = kurantoNoMichi.id
     await Persistence.deleteUser(kurantoNoMichi.id)
-    console.log("\nDeleted user2")
+    conditionalLog("Deleted user2")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, savedDmRecipientID)
-    console.log("\nDM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(dmBank))
 
     consts.NUMBER_OF_RETRIEVABLE_DM_S = saved_number_of_retrievable_dm_s
 
-    console.log("\n\n\n===Clear DB===")
+    conditionalLog("\n\n===Clear DB===")
 
     await Persistence.clearDB()
-    console.log("\nDB cleared")
+    conditionalLog("DB cleared")
 }

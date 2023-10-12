@@ -189,6 +189,9 @@ function handleCreateOrUpdateAccount(
         if (fields.bio[0].length > consts.MAX_BIO_LENGTH) {
             formErrors.push(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
         }
+        if (fields.shortBio[0].length > consts.MAX_SHORT_BIO_LENGTH) {
+            formErrors.push(`bio/Caption must not exceed ${consts.MAX_SHORT_BIO_LENGTH} characters.`)
+        }
 
         if (files.file && files.file[0].size > 0) {
             const uploadedFile = files.file[0]
@@ -211,6 +214,7 @@ function handleCreateOrUpdateAccount(
             req.user.sub,
             fields.username[0],
             fields.bio[0],
+            fields.shortBio[0],
             uploadedFile ? uploadedFile.filepath : null,
             !userId ? false : (fields.isDeleteAvatar ? true : false),
             callback

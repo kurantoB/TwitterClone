@@ -7,6 +7,7 @@ declare global {
         export interface AccountFields extends Fields {
             username: string[],
             bio: string[],
+            shortBio: string[],
             isDeleteAvatar?: string[]
         }
     }
