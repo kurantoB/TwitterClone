@@ -1,4 +1,4 @@
-import { EntityManager, IsNull } from "typeorm";
+import { EntityManager, ILike, IsNull } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -59,7 +59,7 @@ export async function createOrUpdateAccountHelper(
         }
         if (username !== user.username) {
             const alreadyExists = await em.find(User, {
-                where: { username }
+                where: { username: ILike(`${username}`) }
             }).then((users) => users.length > 0)
             if (alreadyExists) {
                 throw new Error(`username/Unable to set username: ${username} is already taken.`)

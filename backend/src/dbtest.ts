@@ -34,6 +34,12 @@ export default async function testDB() {
     const loadedMe = await Persistence.getUser(kurantoBID)
     conditionalLog("loaded user: " + JSON.stringify(loadedMe))
 
+    try {
+        await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantob", "", "")
+    } catch (error) {
+        conditionalLog("Trying to insert kurantob resulted in: " + error)
+    }
+
     // deleteUser
     await Persistence.deleteUser(me.id)
     conditionalLog("deleted user " + kurantoBID)
