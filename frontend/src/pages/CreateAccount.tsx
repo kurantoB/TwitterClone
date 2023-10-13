@@ -189,7 +189,7 @@ export default function CreateAccount() {
                             {usernameError && <p className="create-account--error">{usernameError}</p>}
                         </div>
                         <div>
-                            <h2>Write a caption</h2>
+                            <h2>Write a caption ({consts.MAX_SHORT_BIO_LENGTH - shortBio.length} ch. left)</h2>
                             <input className="create-account--captioninput" type="text" name="shortBio" onChange={handleShortBioChange} value={shortBio} />
                             {shortBioError && <p className="create-account--error">{shortBioError}</p>}
                         </div>
@@ -198,8 +198,8 @@ export default function CreateAccount() {
                 <hr />
                 <div>
                     <h2>Build a profile</h2>
-                    <p className="create-account--smallcaption">Markdown input (<a href="https://en.wikipedia.org/wiki/Markdown#Examples">?</a>)</p>
-                    <p className="create-account--smallcaption">(Links and images not supported)</p>
+                    <p className="create-account--smallcaption">Markdown input (<a href="https://www.markdownguide.org/basic-syntax/">?</a>)</p>
+                    <p className="create-account--smallcaption">Note: images and non-explicit links aren't supported, {consts.MAX_BIO_LENGTH - bio.length} ch. left</p>
                     <div className="create-account--textarea-container">
                         <textarea name="bio" onChange={handleBioChange} value={bio} />
                     </div>

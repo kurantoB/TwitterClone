@@ -21,7 +21,7 @@ export default function DisplayCard({
             </div>
             {shortBio &&
                 <div className="display-card--caption">
-                    <p>{shortBio}</p>
+                    <p>{shortBio.substring(0, consts.MAX_SHORT_BIO_LENGTH)}</p>
                 </div>
             }
         </div>
