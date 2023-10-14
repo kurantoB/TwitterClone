@@ -209,15 +209,23 @@ function handleCreateOrUpdateAccount(
         }
 
         const uploadedFile = files.file ? files.file[0] : null
-        await createOrUpdateAccount(
-            userId,
-            req.user.sub,
-            fields.username[0],
-            fields.bio[0],
-            fields.shortBio[0],
-            uploadedFile ? uploadedFile.filepath : null,
-            !userId ? false : (fields.isDeleteAvatar ? true : false),
-            callback
-        )
+        try {
+            await createOrUpdateAccount(
+                userId,
+                req.user.sub,
+                fields.username[0],
+                fields.bio[0],
+                fields.shortBio[0],
+                uploadedFile ? uploadedFile.filepath : null,
+                !userId ? false : (fields.isDeleteAvatar ? true : false),
+                callback
+            )
+        } catch (error) {
+            if (error.message && error.message.indexOf("username/") !== -1) {
+                callback({ formErrors: [error.message] })
+            } else {
+                throw error
+            }
+        }
     })
 }

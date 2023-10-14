@@ -59,7 +59,7 @@ export async function createOrUpdateAccountHelper(
         }
         if (username !== user.username) {
             const alreadyExists = await em.find(User, {
-                where: { username: ILike(`${username}`) }
+                where: { username }
             }).then((users) => users.length > 0)
             if (alreadyExists) {
                 throw new Error(`username/Unable to set username: ${username} is already taken.`)

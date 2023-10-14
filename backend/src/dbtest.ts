@@ -35,9 +35,9 @@ export default async function testDB() {
     conditionalLog("loaded user: " + JSON.stringify(loadedMe))
 
     try {
-        await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantob", "", "")
+        await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
     } catch (error) {
-        conditionalLog("Trying to insert kurantob resulted in: " + error)
+        conditionalLog("Trying to insert kurantoB resulted in: " + error)
     }
 
     // deleteUser
