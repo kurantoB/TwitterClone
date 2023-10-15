@@ -34,7 +34,7 @@ export default function Sidebar() {
 
     const navigateToProfile = () => {
         doAPICall('GET', '/get-username', dispatch, navigate, accessToken, (body) => {
-            // navigate(`/u/${body.username}`)
+            navigate(`/u/${body.username}`)
         })
     }
 

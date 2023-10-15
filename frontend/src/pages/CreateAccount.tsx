@@ -87,7 +87,7 @@ export default function CreateAccount() {
                         dispatch(findUser())
                         // user account exists for this Google ID - connect to websocket service
                         connectSocket(body.userId, dispatch)
-                        // navigate(`/u/${username}`)
+                        navigate(`/u/${username}`)
                     })
                 }
             },

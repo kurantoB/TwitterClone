@@ -66,6 +66,7 @@ export default function doAPICall(
                     navigate("")
                     googleLogout()
                 } else {
+                    console.log(error.message)
                     dispatch(addErrorMessage(error.message))
                 }
             })
