@@ -15,10 +15,16 @@ export async function initialize() {
 
 // users
 
-export async function getUser(googleid: string) {
-    return await AppDataSource.
-        getRepository(User).
-        findOneBy({ googleid })
+export async function getUserByGoogleID(googleid: string) {
+    return await AppDataSource
+        .getRepository(User)
+        .findOneBy({ googleid })
+}
+
+export async function getUserByUsername(username: string) {
+    return await AppDataSource
+        .getRepository(User)
+        .findOneBy({ username })
 }
 
 export async function deleteUser(userId: string) {
@@ -93,9 +99,9 @@ export function updateUserAvatar(userId: string, avatarFilename: string) {
     })
 }
 
-export async function getUserAvatar(userId: string) {
+export async function getUserAvatar(googleid: string) {
     return AppDataSource.getRepository(User).findOneBy({
-        id: userId
+        googleid
     }).then((user) => user.avatar)
 }
 
@@ -367,6 +373,26 @@ export async function getFollowing(user: User) {
             following: true
         }
     }).then((user) => user.following)
+}
+
+export async function getFollowRelationship(googleid: string, targetUserId: string) {
+    let following = false
+    let followedBy = false
+    const sourceUser = await AppDataSource.getRepository(User).findOne({
+        where: { googleid },
+        relations: {
+            followers: true,
+            following: true
+        }
+    })
+    if (!sourceUser) {
+        throw new Error("User not found.")
+    }
+
+    following = sourceUser.following.some((user) => user.id === targetUserId)
+    followedBy = sourceUser.followers.some((user) => user.id === targetUserId)
+
+    return { following, followedBy }
 }
 
 

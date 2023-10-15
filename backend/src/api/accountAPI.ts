@@ -1,7 +1,11 @@
 import * as Persistence from "../persistence"
 import { Storage } from "@google-cloud/storage"
 import consts from "../consts"
-import getUserId from "../userGetter"
+import { getUserIdFromToken } from "../userGetter"
+
+export async function getUserByUsername(username: string) {
+    return await Persistence.getUserByUsername(username)
+}
 
 export async function createOrUpdateAccount(
     userId: string, // is falsy if this is account creation
@@ -26,7 +30,7 @@ export async function createOrUpdateAccount(
         if (avatarUploadFilename) {
             if (!userId) {
                 // Newly-created user ID
-                userId = await getUserId(googleid)
+                userId = await getUserIdFromToken(googleid)
             }
 
             avatarFilename = `${userId}_avatar`

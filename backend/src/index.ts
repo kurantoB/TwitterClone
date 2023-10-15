@@ -1,16 +1,16 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { initialize as initializePersistence } from "./persistence"
-import { createOrUpdateAccount, deleteUser } from "./api/accountAPI"
-import getUserId from "./userGetter"
+import { getFollowRelationship, initialize as initializePersistence } from "./persistence"
+import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
-import { OAuth2Client } from "google-auth-library"
+import { OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
 import { getUserHasAvatar } from "./api/generalAPI"
 import testDB, { clearDB } from "./dbtest"
+import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 
 /*
 Responses will be in the format { body }
@@ -26,28 +26,28 @@ initializePersistence().then(async () => {
 
 // Middleware to verify JWT tokens
 async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const authorizationHeader = req.headers.authorization
-    let errMsg: string
+    verifyTokenHelper(req.headers.authorization, async () => {
+        res.sendStatus(401)
+    }).then((tokenPayload) => {
+        req.user = tokenPayload
+        next()
+    }).catch((_) => {
+        return res.sendStatus(401)
+    })
+}
+
+async function verifyTokenHelper(authorizationHeader: string, noTokenCallback: () => Promise<void>): Promise<TokenPayload> {
     if (authorizationHeader) {
         const token = authorizationHeader.split(' ')[1]
         const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-        try {
-            const ticket = await client.verifyIdToken({
-                idToken: token,
-                audience: process.env.GOOGLE_CLIENT_ID
-            })
-            const payload = ticket.getPayload()
-            req.user = payload
-            return next()
-        } catch (error) {
-            errMsg = error.message
-        }
+        const ticket = await client.verifyIdToken({
+            idToken: token,
+            audience: process.env.GOOGLE_CLIENT_ID
+        })
+        return ticket.getPayload()
     } else {
-        errMsg = "Failed to get authorization token"
+        await noTokenCallback()
     }
-    return res.status(401).json({
-        error: errMsg
-    })
 }
 
 function startServer() {
@@ -58,25 +58,66 @@ function startServer() {
     app.use(express.json())
 
     app.delete('/clear-db', async (req, res) => {
-        await wrapAPICall({ code: 500 }, req, res, async (_, callback) => {
+        await wrapAPICall(req, res, async (_, callback) => {
             await clearDB()
             callback("OK")
         })
     })
 
-    app.get('/auth/get-user', verifyToken, async (req, res) => {
-        await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
-            const googleid = req.user.sub
-            let userId: string = null
-            userId = await getUserId(googleid)
+    app.get('/get-userid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            if (!userId) {
+                throw new Error("User not found.")
+            }
             callback({ userId })
         })
     })
 
+    app.get('/get-username', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const username = await getUsernameFromToken(req.user.sub)
+            if (!username) {
+                throw new Error("User not found.")
+            }
+            callback({ username })
+        })
+    })
+
+    app.get('/get-profile/:username', async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            verifyTokenHelper(req.headers.authorization, async () => {
+                callback({
+                    user: await getUserByUsername(req.params.username),
+                    viewingOwn: false
+                })
+            }).then(async (tokenPayload) => {
+                if (!tokenPayload) {
+                    return callback({
+                        user: await getUserByUsername(req.params.username),
+                        viewingOwn: false
+                    })
+                }
+                const viewingOwn = (await getUserByUsername(req.params.username)).googleid === tokenPayload.sub
+                callback({
+                    user: await getUserByUsername(req.params.username),
+                    viewingOwn
+                })
+            })
+        })
+    })
+
+    app.get('/get-following-relationship/:targetusername', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const { following, followedBy } = await getFollowRelationship(req.user.sub, req.params.targetusername)
+            callback({ following, followedBy })
+        })
+    })
+
     app.post('/api/create-account', verifyToken, async (req, res) => {
-        await wrapAPICall({ code: 500 }, req, res, async (req, callback) => {
+        await wrapAPICall(req, res, async (req, callback) => {
             const googleid = req.user.sub
-            if (await getUserId(googleid)) {
+            if (await getUserIdFromToken(googleid)) {
                 throw new Error("An account already exists for this Google ID.")
             }
             handleCreateOrUpdateAccount(req, callback, null)
@@ -84,26 +125,20 @@ function startServer() {
     })
 
     app.patch('/api/update-account', verifyToken, async (req, res) => {
-        const errorCodeContext: StatusCodeContext = { code: 500 }
-        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
-            const userId = await validateUserId(req, res, errorCodeContext)
-            handleCreateOrUpdateAccount(req, callback, userId)
+        await wrapAPICall(req, res, async (req, callback) => {
+            handleCreateOrUpdateAccount(req, callback, await getUserIdFromToken(req.user.sub))
         })
     })
 
     app.delete('/api/delete-account', verifyToken, async (req, res) => {
-        const errorCodeContext: StatusCodeContext = { code: 500 }
-        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
-            const userId = await validateUserId(req, res, errorCodeContext)
-            await deleteUser(userId, callback)
+        await wrapAPICall(req, res, async (req, callback) => {
+            await deleteUser(await getUserIdFromToken(req.user.sub), callback)
         })
     })
 
     app.get('/has-avatar', verifyToken, async (req, res) => {
-        const errorCodeContext: StatusCodeContext = { code: 500 }
-        await wrapAPICall(errorCodeContext, req, res, async (req, callback) => {
-            const userId = await validateUserId(req, res, errorCodeContext)
-            const hasAvatar = await getUserHasAvatar(userId)
+        await wrapAPICall(req, res, async (req, callback) => {
+            const hasAvatar = await getUserHasAvatar(req.user.sub)
             callback({ hasAvatar })
         })
     })
@@ -127,26 +162,12 @@ function startServer() {
         })*/
 }
 
-async function validateUserId(
-    req: express.Request,
-    res: express.Response,
-    errorCodeContext: StatusCodeContext
-) {
-    const userId = await getUserId(req.user.sub)
-    if (!userId) {
-        errorCodeContext.code = 401 // unauthorized
-        throw new Error("Error - user validation failed.")
-    }
-    return userId
-}
-
 type StatusCodeContext = {
     code: number
 }
 
 // callback is only called upon success
 async function wrapAPICall(
-    errStatusCodeContext: StatusCodeContext,
     req: express.Request,
     res: express.Response,
     apiCall: (
@@ -159,7 +180,7 @@ async function wrapAPICall(
             res.status(200).json({ body: responseVal })
         })
     } catch (error) {
-        res.status(errStatusCodeContext.code).json({
+        res.status(200).json({
             error: error.message
         })
     }

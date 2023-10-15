@@ -27,11 +27,11 @@ export default async function testDB() {
     conditionalLog("DB cleared")
 
     await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("inserted new user: " + JSON.stringify(me))
 
     // getUser
-    const loadedMe = await Persistence.getUser(kurantoBID)
+    const loadedMe = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("loaded user: " + JSON.stringify(loadedMe))
 
     try {
@@ -43,7 +43,7 @@ export default async function testDB() {
     // deleteUser
     await Persistence.deleteUser(me.id)
     conditionalLog("deleted user " + kurantoBID)
-    const deleteUserGetResult = await Persistence.getUser(kurantoBID)
+    const deleteUserGetResult = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("try get kurantoB: " + JSON.stringify(deleteUserGetResult))
 
     conditionalLog("\n\n===FOLLOW, POST, LIKE, REPOST===")
@@ -52,38 +52,38 @@ export default async function testDB() {
     conditionalLog("DB cleared")
 
     await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("inserted post user: " + JSON.stringify(me))
 
     await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "")
-    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog("inserted follower user: " + JSON.stringify(kurantoNoMichi))
 
     await Persistence.follow(kurantoNoMichi, me)
     conditionalLog("Follow done")
     const postUserFollowers = await Persistence.getFollowers(me)
     conditionalLog("Post user followers: " + JSON.stringify(postUserFollowers))
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
     const followerUserFollowing = await Persistence.getFollowing(kurantoNoMichi)
     conditionalLog("Follower user following: " + JSON.stringify(followerUserFollowing))
-    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
     const followNotif = await Persistence.followHook(kurantoNoMichi, me, true)
     conditionalLog("inserted new follow notification: " + JSON.stringify(followNotif))
 
     await Persistence.follow(me, kurantoNoMichi)
     conditionalLog("Follow-back done")
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
-    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
 
     await Persistence.unfollow(me, kurantoNoMichi)
     conditionalLog("Undo follow-back done")
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
-    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
     
     const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.")
@@ -166,11 +166,11 @@ export default async function testDB() {
     consts.NUMBER_OF_RETRIEVABLE_DM_S = 2
 
     await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "")
-    me = await Persistence.getUser(kurantoBID)
+    me = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("inserted sender user: " + JSON.stringify(me))
 
     await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "")
-    kurantoNoMichi = await Persistence.getUser(kurantoNoMichiID)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog("inserted receiver user: " + JSON.stringify(kurantoNoMichi))
 
     const dm = await Persistence.sendDM(me, kurantoNoMichi, "Howdy")
