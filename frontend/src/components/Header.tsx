@@ -16,11 +16,13 @@ export default function Header() {
         if (response && response.credential) {
             const accessToken = response.credential
             dispatch(login(accessToken))
-            doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
-                if (body.userId) {
-                    dispatch(findUser())
-                    // user account exists for this Google ID - connect to websocket service
-                    connectSocket(body.userId, dispatch)
+            doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
+                dispatch(findUser())
+                // user account exists for this Google ID - connect to websocket service
+                connectSocket(body.userId, dispatch)
+            }, null, (error, body) => {
+                if (error !== "User not found.") {
+                    dispatch(addErrorMessage(error))
                 }
             })
         }
@@ -38,11 +40,11 @@ export default function Header() {
     return (
         <nav className="header">
             <Link to="/">
-                <img src="./images/logo.png"></img>
+                <img src={`${window.location.origin}/images/logo.png`}></img>
             </Link>
             <div className="header--right-group">
                 <button className="linkButton" onClick={() => {
-                    doAPICall("DELETE", "/clear-db", dispatch, null, (body) => {
+                    doAPICall('DELETE', '/clear-db', dispatch, navigate, null, (body) => {
                         console.log("DB cleared")
                     })
                 }}>Clear DB</button>
@@ -53,6 +55,7 @@ export default function Header() {
                         onError={() => {
                             dispatch(addErrorMessage("Error - unable to login."))
                         }}
+                        theme="filled_black"
                     />}
                 </div>
             </div>

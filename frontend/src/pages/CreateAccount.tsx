@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { addErrorMessage, findUser } from "../app/appState"
 import connectSocket from "../app/socket"
 import DisplayCard from "../components/DisplayCard"
+import { useNavigate } from "react-router-dom"
 
 export default function CreateAccount() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -20,6 +21,7 @@ export default function CreateAccount() {
     const [shortBioError, setShortBioError] = useState<string | null>(null)
 
     const dispatch = useAppDispatch()
+    const navigate = useNavigate()
     const accessToken = useAppSelector((state) => state.tokenId)
 
     const handleFormSubmit = (event: FormEvent) => {
@@ -60,12 +62,13 @@ export default function CreateAccount() {
             "POST",
             "/api/create-account",
             dispatch,
+            navigate,
             accessToken,
-            (body: any) => {
+            (body) => {
                 if (body.formErrors) {
-                    for (const formError in body.formErrors) {
-                        const message = formError.split('/')[1]
-                        switch (formError.split('/')[0]) {
+                    for (const i in body.formErrors) {
+                        const message = body.formErrors[i].split('/')[1]
+                        switch (body.formErrors[i].split('/')[0]) {
                             case 'avatar':
                                 setAvatarError(message)
                                 break
@@ -80,21 +83,16 @@ export default function CreateAccount() {
                     dispatch(addErrorMessage("Unable to create account - please fix the below issues before retrying."))
                     window.scrollTo({ top: 0, behavior: 'smooth' })
                 } else {
-                    doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
-                        if (body.userId) {
-                            dispatch(findUser())
-                            // user account exists for this Google ID - connect to websocket service
-                            connectSocket(body.userId, dispatch)
-                        }
+                    doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
+                        dispatch(findUser())
+                        // user account exists for this Google ID - connect to websocket service
+                        connectSocket(body.userId, dispatch)
+                        // navigate(`/u/${username}`)
                     })
-
-                    console.log("Navigate to Profile")
-                    // navigate to Profile
-                    dispatch(addErrorMessage("Profile page isn't ready yet."))
                 }
             },
             formData,
-            (status, body) => {
+            (error, body) => {
                 window.scrollTo({ top: 0, behavior: 'smooth' })
             }
         )

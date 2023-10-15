@@ -29,10 +29,6 @@ export default function connectSocket(userId: string, dispatch: ThunkDispatch<Ap
         dispatch(stateConnectSocket(socket))
     })
 
-    socket.on('disconnect', () => {
-        dispatch(disconnectSocket())
-    })
-
     socket.on('connect_error', () => {
         dispatch(disconnectSocket())
         dispatch(addErrorMessage("Error - unable to connect to notifications service."))

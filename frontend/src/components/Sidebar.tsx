@@ -4,22 +4,24 @@ import { useAppSelector } from "../app/hooks"
 import consts from "../consts"
 import { useState, useEffect } from 'react'
 import { addErrorMessage, findUser } from "../app/appState"
+import { useNavigate } from "react-router-dom"
 
 export default function Sidebar() {
     const dispatch = useDispatch()
     const accessToken = useAppSelector((state) => state.tokenId)
     const userExists = useAppSelector((state) => state.userExists)
-    const [avatarUrl, setAvatarUrl] = useState('images/user_icon.png')
+    const [avatarUrl, setAvatarUrl] = useState<string>(`${window.location.origin}/images/user_icon.png`)
+    const navigate = useNavigate()
 
     useEffect(() => {
         if (!accessToken || !userExists) {
             return
         }
-        doAPICall('GET', '/has-avatar', dispatch, accessToken, (body: any) => {
+        doAPICall('GET', '/has-avatar', dispatch, navigate, accessToken, (body) => {
             if (body.hasAvatar) {
-                doAPICall('GET', '/auth/get-user', dispatch, accessToken, (body: any) => {
+                doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
                     const filePath = `${body.userId}_avatar`
-                    const fileURL = `https://storage.googleapis.com/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
+                    const fileURL = `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
                     setAvatarUrl(fileURL)
                 })
             }
@@ -31,9 +33,9 @@ export default function Sidebar() {
     }
 
     const navigateToProfile = () => {
-        console.log("Navigate to Profile")
-        // navigate to Profile
-        dispatch(addErrorMessage("Profile page isn't ready yet."))
+        doAPICall('GET', '/get-username', dispatch, navigate, accessToken, (body) => {
+            // navigate(`/u/${body.username}`)
+        })
     }
 
     const navigateToNotifications = () => {

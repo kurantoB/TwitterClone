@@ -1,10 +1,11 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit"
+import { Socket } from "socket.io-client"
 
 export type AppState = {
     tokenId: string | null
     userExists: boolean
     errorMessages: string[]
-    websocket: any | null
+    websocket: any
     newNotifCount: number
     userIdToDMCount: { [userId: string]: number }
 }
@@ -31,11 +32,12 @@ const appState = createSlice({
         logout: (state) => {
             state.tokenId = null
             state.userExists = false
+            state.websocket?.disconnect()
             state.websocket = null
             state.newNotifCount = 0
             state.userIdToDMCount = {}
         },
-        connectSocket: (state, action: PayloadAction<any>) => {
+        connectSocket: (state, action: PayloadAction<Socket>) => {
             state.websocket = action.payload
         },
         disconnectSocket: (state) => {

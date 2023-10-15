@@ -15,7 +15,7 @@ export default function DisplayCard({
         <div className="display-card">
             <div className="display-card--left">
                 <div className="avatar-container-big">
-                    <img src={avatarImage ? avatarImage : './images/user_icon.png'} />
+                    <img src={avatarImage ? avatarImage : `${window.location.origin}/images/user_icon.png`} />
                 </div>
                 <p className="display-card--handle">{(username ? username.substring(0, consts.MAX_USERNAME_LENGTH) : <br />)}</p>
             </div>

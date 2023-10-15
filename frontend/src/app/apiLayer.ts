@@ -1,6 +1,7 @@
 import axios, { AxiosResponse } from "axios"
 import { AnyAction, Dispatch, ThunkDispatch } from '@reduxjs/toolkit'
-import { AppState, addErrorMessage } from "./appState"
+import { AppState, addErrorMessage, logout } from "./appState"
+import { NavigateFunction } from "react-router-dom"
 
 type ResponseData = {
     error?: string
@@ -11,11 +12,13 @@ export default function doAPICall(
     method: string,
     route: string,
     dispatch: ThunkDispatch<AppState, undefined, AnyAction> & Dispatch<AnyAction>,
+    navigate: NavigateFunction,
     token: string | null,
     execute: (body: any) => void,
     formData: any = null,
-    errorCallback: (status: number, body: any) => void = (status, body) => {
-        console.log(`API error: status = ${status}, body = ${JSON.stringify(body)}`)
+    errorCallback: (error: string, body: any) => void = (error, body) => {
+        dispatch(addErrorMessage(error))
+        console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
     }
 ) {
     dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
@@ -49,20 +52,20 @@ export default function doAPICall(
     if (resPromise) {
         resPromise
             .then((response) => {
-                if (response.status !== 200) {
-                    errorCallback(response.status, null)
-                }
-
                 if (response.data.error) {
-                    dispatch(addErrorMessage(response.data.error))
+                    errorCallback(response.data.error, response.data.body)
                 } else if (response.data.body) {
-                    if (response.status === 200) {
-                        execute(response.data.body)
-                    }
+                    execute(response.data.body)
                 }
             })
             .catch((error) => {
-                dispatch(addErrorMessage(error.message))
+                if (error.status === 401) {
+                    dispatch(addErrorMessage("Request failed - 401 unauthorized"))
+                    dispatch(logout())
+                    navigate("")
+                } else {
+                    dispatch(addErrorMessage(error.message))
+                }
             })
     }
 }

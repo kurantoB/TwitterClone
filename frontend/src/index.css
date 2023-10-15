@@ -190,6 +190,7 @@ a:visited {
 .display-card--left {
   width: 171px;
   min-width: 171px;
+  text-align: center;
 }
 
 .display-card--handle {
@@ -323,4 +324,33 @@ a:visited {
 .create-account--form .markdown-renderer * {
   max-width: calc(100vw - 496px);
   word-wrap: break-word;
+}
+
+.view-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.view-profile > * {
+  margin: 20px 0;
+}
+
+.view-profile--sticker {
+  display: flex;
+  align-items: center;
+}
+
+.view-profile--sticker svg {
+  stroke: #0a8a71;
+}
+
+.view-proile--stats {
+  display: flex;
+  justify-content: center;
+}
+
+.view-profile--stats > span {
+  padding: 0 32px;
+  text-align: left;
 }

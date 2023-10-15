@@ -8,6 +8,7 @@ import store from './app/store';
 import Home from './pages/Home'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import CreateAccount from './pages/CreateAccount';
+import ViewProfile from './pages/ViewProfile';
 
 const router = createBrowserRouter([
   {
@@ -21,7 +22,11 @@ const router = createBrowserRouter([
       {
         path: "create-account",
         element: <CreateAccount />
-      }
+      },
+      // {
+      //   path: "/u/:username",
+      //   element: <ViewProfile />
+      // }
     ]
   }
 ])
