@@ -2,6 +2,7 @@ import axios, { AxiosResponse } from "axios"
 import { AnyAction, Dispatch, ThunkDispatch } from '@reduxjs/toolkit'
 import { AppState, addErrorMessage, logout } from "./appState"
 import { NavigateFunction } from "react-router-dom"
+import { googleLogout } from "@react-oauth/google"
 
 type ResponseData = {
     error?: string
@@ -63,6 +64,7 @@ export default function doAPICall(
                     dispatch(addErrorMessage("Request failed - 401 unauthorized"))
                     dispatch(logout())
                     navigate("")
+                    googleLogout()
                 } else {
                     dispatch(addErrorMessage(error.message))
                 }

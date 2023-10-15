@@ -1,7 +1,7 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAppSelector, useAppDispatch } from "../app/hooks"
 import { addErrorMessage, findUser, login, logout } from "../app/appState"
-import { GoogleLogin } from '@react-oauth/google'
+import { GoogleLogin, googleLogout } from '@react-oauth/google'
 import connectSocket from "../app/socket"
 import doAPICall from "../app/apiLayer"
 
@@ -35,6 +35,7 @@ export default function Header() {
     const logoutAndNavigate = () => {
         dispatch(logout())
         navigate("")
+        googleLogout()
     }
 
     return (
@@ -56,6 +57,8 @@ export default function Header() {
                             dispatch(addErrorMessage("Error - unable to login."))
                         }}
                         theme="filled_black"
+                        useOneTap
+                        auto_select
                     />}
                 </div>
             </div>
