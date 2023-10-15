@@ -47,6 +47,7 @@ async function verifyTokenHelper(authorizationHeader: string, noTokenCallback: (
         return ticket.getPayload()
     } else {
         await noTokenCallback()
+        return null
     }
 }
 
@@ -86,24 +87,24 @@ function startServer() {
 
     app.get('/get-profile/:username', async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            verifyTokenHelper(req.headers.authorization, async () => {
-                callback({
-                    user: await getUserByUsername(req.params.username),
-                    viewingOwn: false
-                })
-            }).then(async (tokenPayload) => {
-                if (!tokenPayload) {
-                    return callback({
-                        user: await getUserByUsername(req.params.username),
-                        viewingOwn: false
+            await verifyTokenHelper(req.headers.authorization, async () => { })
+                .then(async (tokenPayload) => {
+                    const userBeingViewed = await getUserByUsername(req.params.username)
+                    if (!userBeingViewed) {
+                        throw new Error("User not found.")
+                    }
+                    if (!tokenPayload) {
+                        return callback({
+                            user: userBeingViewed,
+                            viewingOwn: false
+                        })
+                    }
+                    const viewingOwn = userBeingViewed.googleid === tokenPayload.sub
+                    callback({
+                        user: userBeingViewed,
+                        viewingOwn
                     })
-                }
-                const viewingOwn = (await getUserByUsername(req.params.username)).googleid === tokenPayload.sub
-                callback({
-                    user: await getUserByUsername(req.params.username),
-                    viewingOwn
                 })
-            })
         })
     })
 
