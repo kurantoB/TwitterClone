@@ -208,7 +208,7 @@ export async function likePostHook(user: User, post: Post, action: boolean) {
     )
 }
 
-export async function handleLikePost(user: User, { id }: Post, action: boolean) {
+async function handleLikePost(user: User, { id }: Post, action: boolean) {
     const loadedPost = await AppDataSource.getRepository(Post).findOne({
         relations: {
             likedBy: true,
@@ -296,61 +296,71 @@ export async function getPostReposts(post: Post) {
 
 // follows
 
-export async function follow(user: User, targetUser: User) {
-    return await handleFollow(user, targetUser, true)
+export async function follow(userGoogleId: string, targetUserId: string) {
+    return await handleFollow(userGoogleId, targetUserId, true)
 }
 
-export async function unfollow(user: User, targetUser: User) {
-    return await handleFollow(user, targetUser, false)
+export async function unfollow(userGoogleId: string, targetUserId: string) {
+    return await handleFollow(userGoogleId, targetUserId, false)
 }
 
-export async function followHook(sourceUser: User, targetUser: User, action: boolean) {
+export async function followHook(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     return await makeNotification(
-        targetUser,
+        await AppDataSource.getRepository(User).findOneBy({ id: targetUserId }),
         NotificationType.FOLLOW,
         null,
-        sourceUser,
+        await AppDataSource.getRepository(User).findOneBy({ googleid: sourceUserGoogleId }),
         action
     )
 }
 
-export async function handleFollow(sourceUser: User, targetUser: User, action: boolean) {
+async function handleFollow(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     await doTransaction(async (em) => {
         const loadedSourceUser = await em.findOne(User, {
             relations: {
                 following: true,
                 followers: true
             },
-            where: { id: sourceUser.id }
+            where: { googleid: sourceUserGoogleId }
         })
+        if (!loadedSourceUser) {
+            throw new Error("Unable to retrieve user using token.")
+        }
+        let loadedTargetUser = await em.findOneBy(User, { id: targetUserId })
+        if (!loadedTargetUser) {
+            throw new Error("Unable to retrieve user by ID.")
+        }
 
         let mutualDelta = 0
         if (action) {
             if (
                 loadedSourceUser.following.length == 0
-                || loadedSourceUser.following.filter((user) => user.id === targetUser.id).length === 0
+                || loadedSourceUser.following.filter((user) => user.id === targetUserId).length === 0
             ) {
-                loadedSourceUser.following.push(targetUser)
-            }
-            if (loadedSourceUser.followers.map((user) => user.id).indexOf(targetUser.id) !== -1) {
-                mutualDelta = 1
+                loadedSourceUser.following.push(loadedTargetUser)
+                if (loadedSourceUser.followers.filter((user) => user.id === targetUserId).length === 1) {
+                    mutualDelta = 1
+                }
             }
         } else {
-            loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUser.id)
-            if (loadedSourceUser.followers.map((user) => user.id).indexOf(targetUser.id) !== -1) {
-                mutualDelta = -1
+            const initialFollowingLength = loadedSourceUser.following.length
+            loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUserId)
+            if (loadedSourceUser.following.length != initialFollowingLength) {
+                if (loadedSourceUser.followers.filter((user) => user.id === targetUserId).length === 1) {
+                    mutualDelta = -1
+                }
             }
         }
         loadedSourceUser.followingCount = loadedSourceUser.following.length
         loadedSourceUser.mutualCount += mutualDelta
         await em.save(User, loadedSourceUser)
-
-        const loadedTargetUser = await em.findOne(User, {
+        loadedTargetUser = await em.findOne(User, {
             relations: {
                 followers: true
             },
-            where: { id: targetUser.id }
+            where: { id: targetUserId }
         })
+
         loadedTargetUser.followerCount = loadedTargetUser.followers.length
         loadedTargetUser.mutualCount += mutualDelta
         await em.save(User, loadedTargetUser)
@@ -407,7 +417,7 @@ export async function unblockUser(user: User, targetUser: User) {
     return await handleBlock(user, targetUser, false)
 }
 
-export async function handleBlock({ id }: User, targetUser: User, action: boolean) {
+async function handleBlock({ id }: User, targetUser: User, action: boolean) {
     const loadedSourceUser = await AppDataSource.getRepository(User).findOne({
         relations: { blockedUsers: true },
         where: { id }

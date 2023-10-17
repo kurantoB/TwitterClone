@@ -1,7 +1,7 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { getFollowRelationship, initialize as initializePersistence } from "./persistence"
+import { follow, followHook, getFollowRelationship, initialize as initializePersistence, unfollow } from "./persistence"
 import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
@@ -112,6 +112,22 @@ function startServer() {
         await wrapAPICall(req, res, async (req, callback) => {
             const { following, followedBy } = await getFollowRelationship(req.user.sub, req.params.targetusername)
             callback({ following, followedBy })
+        })
+    })
+
+    app.patch('/follow/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            await follow(req.user.sub, req.params.targetuserid)
+            callback("OK")
+            await followHook(req.user.sub, req.params.targetuserid, true)
+        })
+    })
+
+    app.patch('/unfollow/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            await unfollow(req.user.sub, req.params.targetuserid)
+            callback("OK")
+            await followHook(req.user.sub, req.params.targetuserid, false)
         })
     })
 
