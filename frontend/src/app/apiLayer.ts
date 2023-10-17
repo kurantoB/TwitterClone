@@ -13,7 +13,7 @@ export default function doAPICall(
     method: string,
     route: string,
     dispatch: ThunkDispatch<AppState, undefined, AnyAction> & Dispatch<AnyAction>,
-    navigate: NavigateFunction,
+    navigate: NavigateFunction | null,
     token: string | null,
     execute: (body: any) => void,
     formData: any = null,
@@ -63,7 +63,9 @@ export default function doAPICall(
                 if (error.status === 401) {
                     dispatch(addErrorMessage("Request failed - 401 unauthorized"))
                     dispatch(logout())
-                    navigate("")
+                    if (navigate) {
+                        navigate("")
+                    }
                     googleLogout()
                 } else {
                     console.log(error.message)

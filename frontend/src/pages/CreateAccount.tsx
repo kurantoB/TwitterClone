@@ -3,12 +3,12 @@ import consts from "../consts"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import doAPICall from "../app/apiLayer"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
-import { addErrorMessage, findUser } from "../app/appState"
+import { HeaderMode, addErrorMessage, findUser, setHeaderMode } from "../app/appState"
 import connectSocket from "../app/socket"
 import DisplayCard from "../components/DisplayCard"
 import { useNavigate } from "react-router-dom"
 
-export default function CreateAccount() {
+export default function CreateOrEditAccount() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [username, setUsername] = useState<string>("")
     const [bio, setBio] = useState<string>("")
@@ -23,6 +23,8 @@ export default function CreateAccount() {
     const dispatch = useAppDispatch()
     const navigate = useNavigate()
     const accessToken = useAppSelector((state) => state.tokenId)
+
+    dispatch(setHeaderMode(HeaderMode.NONE))
 
     const handleFormSubmit = (event: FormEvent) => {
         event.preventDefault()

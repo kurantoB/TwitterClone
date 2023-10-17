@@ -76,11 +76,11 @@ a:visited {
   justify-content: space-between;
 }
 
-.header--right-group {
+.header--group {
   display: flex;
 }
 
-.header--right-group>* {
+.header--group>* {
   padding: 0px 20px;
 }
 
@@ -124,7 +124,7 @@ a:visited {
   align-items: center;
 }
 
-.sidebar--elem {
+.interactive--elem {
   width: 158px;
   height: 158px;
   display: flex;
@@ -133,7 +133,7 @@ a:visited {
   align-items: center;
 }
 
-.sidebar--active-area {
+.interactive--active-area {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -142,23 +142,28 @@ a:visited {
   height: 80%;
 }
 
-.sidebar--active-area:hover {
+.interactive--active-area:hover {
   cursor: pointer;
   border-style: solid;
   border-radius: 20px;
   border-width: 4px;
 }
 
-.sidebar--active-area>* {
+.interactive--active-area>* {
   width: 50%;
   height: 50%;
 }
 
-.sidebar--active-area img {
+.interactive--active-area img {
+  width: 75%;
+  height: 75%;
+  background-color: white;
+  object-fit: cover;
+  object-position: center center;
   clip-path: circle();
 }
 
-.sidebar--active-area svg {
+.interactive--active-area svg {
   fill: #b2d4d4;
 }
 
@@ -244,6 +249,18 @@ a:visited {
   font-size: 2rem;
 }
 
+.find-user--input {
+  font-family: 'JetBrains Mono';
+  font-size: 1rem;
+  color: white;
+  background-color: black;
+  text-align: center;
+}
+
+.find-user--error {
+  color: #ffd588;
+}
+
 /* Create Account */
 
 .create-account {
@@ -258,14 +275,14 @@ a:visited {
   color: #ffd588;
 }
 
-.create-account--form > div {
+.create-account--form>div {
   padding-block: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.create-account--form > div > *:not(.create-account--smallcaption) {
+.create-account--form>div>*:not(.create-account--smallcaption) {
   margin: 32px 0;
 }
 
@@ -276,7 +293,7 @@ a:visited {
   width: 100%;
 }
 
-.create-account--smallinputs > div {
+.create-account--smallinputs>div {
   width: 480px;
 }
 
@@ -334,14 +351,14 @@ a:visited {
   padding: 0 32px;
 }
 
-.view-profile > div {
+.view-profile>div {
   padding-block: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-.view-profile > hr {
+.view-profile>hr {
   width: 100%;
 }
 
@@ -360,13 +377,17 @@ a:visited {
   grid-template-columns: 2fr 1fr 2fr 1fr 2fr;
 }
 
+.view-profile--interactive {
+  display: flex;
+}
+
 .view-profile--tab {
   border: 1px solid white;
   background-color: #114c77;
   width: 100%;
 }
 
-.view-profile--tab > div {
+.view-profile--tab>div {
   width: 80%;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;
@@ -387,6 +408,6 @@ a:visited {
   align-items: flex-start;
 }
 
-.view-profile--lists > hr {
+.view-profile--lists>hr {
   width: 100%;
 }

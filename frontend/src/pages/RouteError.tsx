@@ -2,7 +2,7 @@ import Header from "../components/Header"
 import Sidebar from "../components/Sidebar"
 import WentWrong from "../components/WentWrong"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
-import { removeErrorMessage } from "../app/appState"
+import { HeaderMode, removeErrorMessage, setHeaderMode } from "../app/appState"
 
 export default function RouteError() {
     const errors = useAppSelector((state) => state.errorMessages)
@@ -11,6 +11,8 @@ export default function RouteError() {
     const closeError = (index: number) => {
         dispatch(removeErrorMessage(index))
     }
+
+    dispatch(setHeaderMode(HeaderMode.NONE))
 
     return (
         <>

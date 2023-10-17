@@ -7,8 +7,10 @@ import { useEffect, useState } from 'react'
 import consts from "../consts"
 import { format } from "date-fns"
 import MarkdownRenderer from "../components/MarkdownRenderer"
+import { HeaderMode, setHeaderMode } from "../app/appState"
 
 type User = {
+    id: string
     username: string
     avatar: string
     bio: string
@@ -41,16 +43,37 @@ export default function ViewProfile() {
         doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (body) => {
             setUser(body.user)
             setViewingOwn(body.viewingOwn)
-            if (userExists && !body.viewingOwn) {
-                doAPICall('GET', `/get-following-relationship/${body.user.id}`, dispatch, navigate, token, (body) => {
-                    setFollowing(body.following)
-                    setFollowedBy(body.followedBy)
-                })
+            if (userExists) {
+                if (body.viewingOwn) {
+                    dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
+                } else {
+                    doAPICall('GET', `/get-following-relationship/${body.user.id}`, dispatch, navigate, token, (body) => {
+                        setFollowing(body.following)
+                        setFollowedBy(body.followedBy)
+                    })
+                    dispatch(setHeaderMode(HeaderMode.NONE))
+                }
+            } else {
+                dispatch(setHeaderMode(HeaderMode.NONE))
             }
         }, null, (error, body) => {
             navigate("/error")
         })
     }, [userExists, username])
+
+    const handleFollow = (action: boolean) => {
+        if (!user) {
+            return
+        }
+        doAPICall('PATCH', `/${action ? "follow" : "unfollow"}/${user.id}`, dispatch, navigate, token, (body) => {
+            setFollowing(action)
+            setUser({
+                ...user,
+                followerCount: action ? user.followerCount + 1 : user.followerCount - 1,
+                mutualCount: action ? (followedBy ? user.mutualCount + 1 : user.mutualCount) : (followedBy ? user.mutualCount - 1 : user.mutualCount)
+            })
+        })
+    }
 
     const openTab = (elemNum: number) => {
         const currentTabContentStyles: React.CSSProperties[] = [
@@ -81,19 +104,24 @@ export default function ViewProfile() {
         <div className="view-profile">
             <div>
                 <DisplayCard
-                    avatarImage={user ? `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${user.avatar}` : `${window.location.origin}/images/user_icon.png`}
+                    avatarImage={(user && user.avatar) ? `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${user.avatar}` : `${window.location.origin}/images/user_icon.png`}
                     username={user ? user.username : ""}
                     shortBio={user ? user.shortBio : ""}
                 />
             </div>
-            <div>
-                {!viewingOwn && following && followedBy && <h3 className="view-profile--sticker">Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
-                {!viewingOwn && !following && followedBy && <h3 className="view-profile--sticker">Follows you&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
-            </div>
-            <div>
-                {!viewingOwn && !following && <button className="largeButton">Follow</button>}
-                {!viewingOwn && following && <button className="largeButton">Unfollow</button>}
-            </div>
+            {userExists && !viewingOwn &&
+                <>
+                    <div>
+                        {following && followedBy && <h3 className="view-profile--sticker">Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
+                        {!following && followedBy && <h3 className="view-profile--sticker">Follows you&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
+                    </div>
+                    <div>
+                        {!following && <button className="largeButton" onClick={() => handleFollow(true)}>{followedBy ? "Follow Back" : "Follow"}</button>}
+                        {!viewingOwn && following && <button className="largeButton" onClick={() => handleFollow(false)}>Unfollow</button>}
+                    </div>
+                </>
+
+            }
             <div>
                 <div className="view-profile--stats">
                     <span>Followers: {user?.followerCount}</span>
@@ -104,12 +132,30 @@ export default function ViewProfile() {
                 </div>
                 {user && <p>Joined {format(new Date(user.createTime), 'MMM yyyy')}</p>}
             </div>
+            {
+                !viewingOwn && userExists &&
+                <div>
+                    <div className="view-profile--interactive">
+                        <div className="interactive--elem" title="DM user">
+                            <div className="interactive--active-area">
+                                <svg version="1.1" viewBox="0 0 24 24"><g className="st0" id="grid_system" /><g id="_icons"><path d="M18,5H6C5.1,5,4.1,5.3,3.4,5.9c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0C2.5,6.7,2,7.8,2,9v6c0,2.2,1.8,4,4,4h12   c2.2,0,4-1.8,4-4V9c0-1.2-0.5-2.3-1.4-3.1C19.9,5.3,18.9,5,18,5z M18,7L13,10.9c-0.6,0.5-1.5,0.5-2.1,0L6,7H18z M20,15   c0,1.1-0.9,2-2,2H6c-1.1,0-2-0.9-2-2V9c0-0.3,0.1-0.6,0.2-0.9l5.5,4.4c0.7,0.5,1.5,0.8,2.3,0.8s1.6-0.3,2.3-0.8l5.5-4.4   C19.9,8.4,20,8.7,20,9V15z" /></g></svg>
+                            </div>
+                        </div>
+                        <div className="interactive--elem" title="Block user">
+                            <div className="interactive--active-area">
+                                <svg enable-background="new 0 0 32 32" height="32px" id="Capa_1" version="1.1" viewBox="0 0 32 32" width="32px" xmlSpace="preserve" xmlns="http://www.w3.org/2000/svg"><path d="M16,4c6.63,0,12,5.37,12,12s-5.37,12-12,12S4,22.63,4,16S9.37,4,16,4 M8.25,22.33L22.33,8.26C20.61,6.85,18.4,6,16,6  C10.49,6,6,10.49,6,16C6,18.4,6.85,20.61,8.25,22.33 M16,26c5.51,0,10-4.49,10-10c0-2.4-0.85-4.61-2.26-6.33L9.67,23.75  C11.39,25.15,13.6,26,16,26 M16,2C8.28,2,2,8.28,2,16s6.28,14,14,14s14-6.28,14-14S23.72,2,16,2L16,2z M8.632,19.12  C8.219,18.139,8,17.076,8,16c0-4.411,3.589-8,8-8c1.079,0,2.143,0.22,3.124,0.636L8.632,19.12L8.632,19.12z M12.88,23.368  l10.484-10.492C23.78,13.857,24,14.921,24,16c0,4.411-3.589,8-8,8C14.924,24,13.861,23.781,12.88,23.368L12.88,23.368z" /><g /><g /><g /><g /><g /><g /></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
             <hr />
             <div>
                 <MarkdownRenderer markdownText={user ? user.bio : ""} />
             </div>
             <hr />
-            {!viewingOwn && userExists &&
+            {
+                !viewingOwn && userExists &&
                 <>
                     <div>
                         <h2>Shared Mutuals</h2>
@@ -122,10 +168,36 @@ export default function ViewProfile() {
                 {/* Tab links */}
                 <div className="view-profile--tab">
                     <div>
-                        <button className="linkButton view-profile--tabbutton" onClick={() => { openTab(0) }} id="view-profile--defaultopen">Activity</button>
-                        <button className="linkButton view-profile--tabbutton" onClick={() => { openTab(1) }}>{viewingOwn ? "Mutuals" : "More Mutuals"}</button>
-                        <button className="linkButton view-profile--tabbutton" onClick={() => { openTab(2) }}>Followers</button>
-                        <button className="linkButton view-profile--tabbutton" onClick={() => { openTab(3) }}>Following</button>
+                        <button
+                            className="linkButton view-profile--tabbutton"
+                            onClick={() => { openTab(0) }}
+                            id="view-profile--defaultopen"
+                            title="Activity feed"
+                        >Activity</button>
+                        {userExists && !viewingOwn &&
+                            <button
+                                className="linkButton view-profile--tabbutton"
+                                onClick={() => { openTab(1) }}
+                                title="Mutuals not shared with this user"
+                            >More Mutuals</button>
+                        }
+                        {(!userExists || viewingOwn) &&
+                            <button
+                                className="linkButton view-profile--tabbutton"
+                                onClick={() => { openTab(1) }}
+                                title="All mutuals"
+                            >Mutuals</button>
+                        }
+                        <button
+                            className="linkButton view-profile--tabbutton"
+                            onClick={() => { openTab(2) }}
+                            title="Followers apart from mutuals"
+                        >Followers</button>
+                        <button
+                            className="linkButton view-profile--tabbutton"
+                            onClick={() => { openTab(3) }}
+                            title="Followed handles apart from mutuals"
+                        >Following</button>
                     </div>
                 </div>
                 {/* Tab content */}
@@ -187,6 +259,6 @@ export default function ViewProfile() {
                     }
                 </div>
             </div>
-        </div>
+        </div >
     )
 }

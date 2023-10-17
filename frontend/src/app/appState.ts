@@ -5,15 +5,24 @@ export type AppState = {
     tokenId: string | null
     userExists: boolean
     errorMessages: string[]
+    headerMode: HeaderMode
     websocket: any
     newNotifCount: number
     userIdToDMCount: { [userId: string]: number }
+}
+
+export enum HeaderMode {
+    CAN_EDIT_PROFILE,
+    IS_VIEWING_FOR_YOU,
+    IS_VIEWING_POPULAR,
+    NONE
 }
 
 const initialState: AppState = {
     tokenId: null,
     userExists: false,
     errorMessages: [],
+    headerMode: HeaderMode.NONE,
     websocket: null,
     newNotifCount: 0,
     userIdToDMCount: {}
@@ -32,6 +41,7 @@ const appState = createSlice({
         logout: (state) => {
             state.tokenId = null
             state.userExists = false
+            state.headerMode = HeaderMode.NONE,
             state.websocket?.disconnect()
             state.websocket = null
             state.newNotifCount = 0
@@ -62,6 +72,9 @@ const appState = createSlice({
         },
         removeErrorMessage: (state, action: PayloadAction<number>) => {
             state.errorMessages = state.errorMessages.filter((_, index) => index !== action.payload)
+        },
+        setHeaderMode: (state, action: PayloadAction<HeaderMode>) => {
+            state.headerMode = action.payload
         }
     }
 })
@@ -78,5 +91,6 @@ export const {
     receiveDMsFromUser,
     resetDMsFromUser,
     addErrorMessage,
-    removeErrorMessage
+    removeErrorMessage,
+    setHeaderMode
 } = appState.actions

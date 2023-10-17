@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAppSelector, useAppDispatch } from "../app/hooks"
-import { addErrorMessage, findUser, login, logout } from "../app/appState"
+import { HeaderMode, addErrorMessage, findUser, login, logout } from "../app/appState"
 import { GoogleLogin, googleLogout } from '@react-oauth/google'
 import connectSocket from "../app/socket"
 import doAPICall from "../app/apiLayer"
@@ -11,6 +11,7 @@ export default function Header() {
 
     const isLoggedIn = useAppSelector((state) => state.tokenId ? true : false)
     const userExists = useAppSelector((state) => state.userExists)
+    const headerMode = useAppSelector((state) => state.headerMode)
 
     const credentialResponse = (response: any) => {
         if (response && response.credential) {
@@ -28,7 +29,7 @@ export default function Header() {
         }
     }
 
-    const navigateToCreateAccount = () => {
+    const navigateToCreateOrEditAccount = () => {
         navigate("/create-account")
     }
 
@@ -40,16 +41,23 @@ export default function Header() {
 
     return (
         <nav className="header">
-            <Link to="/">
-                <img src={`${window.location.origin}/images/logo.png`}></img>
-            </Link>
-            <div className="header--right-group">
+            <div className="header--group">
+                <div title="Home">
+                    <Link to="/">
+                        <img src={`${window.location.origin}/images/logo.png`}></img>
+                    </Link>
+                </div>
+                {headerMode === HeaderMode.CAN_EDIT_PROFILE &&
+                    <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Edit Profile</button>
+                }
+            </div>
+            <div className="header--group">
                 <button className="linkButton" onClick={() => {
                     doAPICall('DELETE', '/clear-db', dispatch, navigate, null, (body) => {
                         console.log("DB cleared")
                     })
                 }}>Clear DB</button>
-                {isLoggedIn && !userExists && <button className="linkButton" onClick={navigateToCreateAccount}>Create Account</button>}
+                {isLoggedIn && !userExists && <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Create Account</button>}
                 <div>
                     {isLoggedIn ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
                         onSuccess={credentialResponse}
@@ -62,6 +70,6 @@ export default function Header() {
                     />}
                 </div>
             </div>
-        </nav>
+        </nav >
     )
 }
