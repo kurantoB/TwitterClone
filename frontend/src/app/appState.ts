@@ -41,7 +41,7 @@ const appState = createSlice({
         logout: (state) => {
             state.tokenId = null
             state.userExists = false
-            state.headerMode = HeaderMode.NONE,
+            state.headerMode = HeaderMode.NONE
             state.websocket?.disconnect()
             state.websocket = null
             state.newNotifCount = 0
