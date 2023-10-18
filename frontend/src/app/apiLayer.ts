@@ -20,9 +20,15 @@ export default function doAPICall(
     errorCallback: (error: string, body: any) => void = (error, body) => {
         dispatch(addErrorMessage(error))
         console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
-    }
+    },
+    effectDependencyName: string = "",
+    effectDependency: any = null
 ) {
-    dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
+    if (effectDependencyName === "") {
+        // dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
+    } else {
+        // dispatch(addErrorMessage(`Making API call: ${method} ${route} per change in ${effectDependencyName}: ${JSON.stringify(effectDependency)}`))
+    }
     const axiosInstance = axios.create({
         baseURL: process.env.REACT_APP_BASE_URL
     })
@@ -60,8 +66,8 @@ export default function doAPICall(
                 }
             })
             .catch((error) => {
-                if (error.status === 401) {
-                    dispatch(addErrorMessage("Request failed - 401 unauthorized"))
+                if (error.response.status === 401) {
+                    dispatch(addErrorMessage(`${method} request ${route} failed - unauthorized`))
                     dispatch(logout())
                     if (navigate) {
                         navigate("")
@@ -69,7 +75,7 @@ export default function doAPICall(
                     googleLogout()
                 } else {
                     console.log(error.message)
-                    dispatch(addErrorMessage(error.message))
+                    dispatch(addErrorMessage(`${method} request ${route} failed - ${error.message}`))
                 }
             })
     }

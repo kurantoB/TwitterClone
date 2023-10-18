@@ -12,9 +12,9 @@ export default function Home() {
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
-    const accessToken = useAppSelector((state) => state.tokenId)
-
     dispatch(setHeaderMode(HeaderMode.NONE))
+
+    const token = useAppSelector((state) => state.tokenId)
 
     const navigateToFeed = () => {
         console.log("Navigate to Feed")
@@ -51,7 +51,7 @@ export default function Home() {
                         {usernameError && <p className="find-user--error">{usernameError}</p>}
                     </form>
                 </div>
-                {/* {accessToken && <p>Testing only - your authentication token is {accessToken}</p>} */}
+                {token && <p>Testing only - your authentication token is {token}</p>}
             </section>
         </div>
     )
