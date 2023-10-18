@@ -1,7 +1,7 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { follow, followHook, getFollowRelationship, initialize as initializePersistence, unfollow } from "./persistence"
+import { blockUser, follow, followHook, getFollowRelationship, initialize as initializePersistence, isBlockedBy, isBlocking, unblockUser, unfollow } from "./persistence"
 import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
@@ -31,8 +31,8 @@ async function verifyToken(req: express.Request, res: express.Response, next: ex
     }).then((tokenPayload) => {
         req.user = tokenPayload
         next()
-    }).catch((_) => {
-        return res.sendStatus(401)
+    }).catch((error) => {
+        res.sendStatus(401)
     })
 }
 
@@ -105,6 +105,34 @@ function startServer() {
                         viewingOwn
                     })
                 })
+        })
+    })
+
+    app.get('/is-blocked/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const isBlockingVal = await isBlocking(req.user.sub, req.params.targetuserid)
+            callback({ isBlocking: isBlockingVal })
+        })
+    })
+
+    app.get('/is-blocked-by/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const isBlockedByVal = await isBlockedBy(req.user.sub, req.params.targetuserid)
+            callback({ isBlockedBy: isBlockedByVal })
+        })
+    })
+
+    app.get('/block/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            await blockUser(req.user.sub, req.params.targetuserid)
+            callback("OK")
+        })
+    })
+
+    app.get('/unblock/:targetuserid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            await unblockUser(req.user.sub, req.params.targetuserid)
+            callback("OK")
         })
     })
 

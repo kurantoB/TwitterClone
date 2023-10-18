@@ -409,27 +409,52 @@ export async function getFollowRelationship(googleid: string, targetUserId: stri
 
 // blocks
 
-export async function blockUser(user: User, targetUser: User) {
-    return await handleBlock(user, targetUser, true)
+export async function blockUser(userGoogleId: string, targetUserId: string) {
+    return await handleBlock(userGoogleId, targetUserId, true)
 }
 
-export async function unblockUser(user: User, targetUser: User) {
-    return await handleBlock(user, targetUser, false)
+export async function unblockUser(userGoogleId: string, targetUserId: string) {
+    return await handleBlock(userGoogleId, targetUserId, false)
 }
 
-async function handleBlock({ id }: User, targetUser: User, action: boolean) {
+async function handleBlock(googleid: string, targetUserId: string, action: boolean) {
     const loadedSourceUser = await AppDataSource.getRepository(User).findOne({
-        relations: { blockedUsers: true },
-        where: { id }
+        relations: {
+            blockedUsers: true
+        },
+        where: { googleid }
     })
+    let targetUserGoogleId: string
     if (action) {
-        if (loadedSourceUser.blockedUsers.filter((user) => user.id === targetUser.id).length === 0) {
+        if (loadedSourceUser.blockedUsers.filter((user) => user.id === targetUserId).length === 0) {
+            const targetUser = await AppDataSource.getRepository(User).findOneBy({ id: targetUserId })
             loadedSourceUser.blockedUsers.push(targetUser)
+            targetUserGoogleId = targetUser.googleid
         }
     } else {
-        loadedSourceUser.blockedUsers = loadedSourceUser.blockedUsers.filter((user) => user.id !== targetUser.id)
+        loadedSourceUser.blockedUsers = loadedSourceUser.blockedUsers.filter((user) => user.id !== targetUserId)
     }
-    return await AppDataSource.getRepository(User).save(loadedSourceUser)
+    await AppDataSource.getRepository(User).save(loadedSourceUser)
+    if (action) {
+        await unfollow(googleid, targetUserId)
+        await unfollow(targetUserGoogleId, loadedSourceUser.id)
+    }
+}
+
+export async function isBlocking(googleid: string, targetUserId: string) {
+    const loadedUser = await AppDataSource.getRepository(User).findOne({
+        relations: { blockedUsers: true },
+        where: { googleid }
+    })
+    return loadedUser.blockedUsers.some((user) => user.id === targetUserId)
+}
+
+export async function isBlockedBy(googleid: string, targetUserId: string) {
+    const loadedTargetUser = await AppDataSource.getRepository(User).findOne({
+        relations: { blockedUsers: true },
+        where: {id: targetUserId }
+    })
+    return loadedTargetUser.blockedUsers.some((user) => user.googleid === googleid)
 }
 
 
