@@ -167,10 +167,6 @@ a:visited {
   fill: #b2d4d4;
 }
 
-.interactive--active-area svg.block {
-  fill: #c45544;
-}
-
 .avatar-container-big {
   width: 128px;
   height: 128px;

@@ -3,7 +3,7 @@ import doAPICall from "../app/apiLayer"
 import { useAppSelector } from "../app/hooks"
 import consts from "../consts"
 import { useState, useEffect } from 'react'
-import { addErrorMessage, findUser, } from "../app/appState"
+import { addErrorMessage, findUser } from "../app/appState"
 import { useNavigate } from "react-router-dom"
 
 export default function Sidebar() {
@@ -14,7 +14,7 @@ export default function Sidebar() {
     const navigate = useNavigate()
 
     useEffect(() => {
-        if (!userExists) {
+        if (!accessToken || !userExists) {
             return
         }
         doAPICall('GET', '/has-avatar', dispatch, navigate, accessToken, (body) => {
@@ -23,14 +23,14 @@ export default function Sidebar() {
                     const filePath = `${body.userId}_avatar`
                     const fileURL = `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
                     setAvatarUrl(fileURL)
-                }, null, undefined, "userExists", userExists)
+                })
             } else {
                 setAvatarUrl(`${window.location.origin}/images/user_icon.png`)
             }
-        }, null, undefined, "userExists", userExists)
+        })
     }, [userExists])
 
-    if (!userExists) {
+    if (!accessToken || !userExists) {
         return <div></div>
     }
 

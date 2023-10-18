@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, json } from "react-router-dom"
 import doAPICall from "../app/apiLayer"
 import { useDispatch } from "react-redux"
 import { useAppSelector } from "../app/hooks"
@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import consts from "../consts"
 import { format } from "date-fns"
 import MarkdownRenderer from "../components/MarkdownRenderer"
-import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
+import { HeaderMode, setHeaderMode } from "../app/appState"
 
 type User = {
     id: string
@@ -32,8 +32,6 @@ export default function ViewProfile() {
     const [viewingOwn, setViewingOwn] = useState<boolean>(false)
     const [following, setFollowing] = useState<boolean>(false)
     const [followedBy, setFollowedBy] = useState<boolean>(false)
-    const [isBlocking, setIsBlocking] = useState<boolean>(false)
-    const [isBlockedBy, setIsBlockedBy] = useState<boolean>(false)
     const [tabContentStyles, setTabContentStyles] = useState<React.CSSProperties[]>([
         { display: "none" },
         { display: "none" },
@@ -41,47 +39,26 @@ export default function ViewProfile() {
         { display: "none" }
     ])
 
-    const accessProfile = (user: User, viewingOwn: boolean) => {
-        setUser(user)
-        setViewingOwn(viewingOwn)
-        if (userExists) {
-            if (viewingOwn) {
-                dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
-            } else {
-                doAPICall('GET', `/get-following-relationship/${user.id}`, dispatch, navigate, token, (body) => {
-                    setFollowing(body.following)
-                    setFollowedBy(body.followedBy)
-                }, null, undefined, "userExists, username", JSON.stringify([userExists, username]))
-                doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (body) => {
-                    setIsBlocking(body.isBlocking)
-                }, null, undefined, "userExists, username", JSON.stringify([userExists, username]))
-            }
-        }
-    }
-
     useEffect(() => {
-        setFollowing(false)
-        setFollowedBy(false)
-        setIsBlocking(false)
-        setIsBlockedBy(false)
         doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (body) => {
-            dispatch(setHeaderMode(HeaderMode.NONE))
-            const user: User = body.user
-            const viewingOwn: boolean = body.viewingOwn
-            if (viewingOwn || !userExists) {
-                accessProfile(user, true)
+            setUser(body.user)
+            setViewingOwn(body.viewingOwn)
+            if (userExists) {
+                if (body.viewingOwn) {
+                    dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
+                } else {
+                    doAPICall('GET', `/get-following-relationship/${body.user.id}`, dispatch, navigate, token, (body) => {
+                        setFollowing(body.following)
+                        setFollowedBy(body.followedBy)
+                    })
+                    dispatch(setHeaderMode(HeaderMode.NONE))
+                }
             } else {
-                doAPICall('GET', `/is-blocked-by/${body.user.id}`, dispatch, navigate, token, (body) => {
-                    if (body.isBlockedBy) {
-                        setIsBlockedBy(true)
-                    } else {
-                        accessProfile(user, false)
-                    }
-                }, null, undefined, "userExists, username", JSON.stringify([userExists, username]))
+                dispatch(setHeaderMode(HeaderMode.NONE))
             }
         }, null, (error, body) => {
             navigate("/error")
-        }, "userExists, username", JSON.stringify([userExists, username]))
+        })
     }, [userExists, username])
 
     const handleFollow = (action: boolean) => {
@@ -121,30 +98,7 @@ export default function ViewProfile() {
 
     useEffect(() => {
         document.getElementById("view-profile--defaultopen")?.click()
-    }, [])
-
-    if (isBlockedBy) {
-        return (
-            <div className="view-profile">
-                <p>This user has you blocked.</p>
-            </div>
-        )
-    }
-
-    const handleBlock = (action: boolean) => {
-        if (!user) {
-            return
-        }
-        doAPICall('GET', `/${action ? "block" : "unblock"}/${user.id}`, dispatch, navigate, token, (body) => {
-            setIsBlocking(action)
-        })
-    }
-
-    const handleDM = () => {
-        console.log("Navigate to DMs")
-        // navigate to DMs
-        dispatch(addErrorMessage("DMs page isn't ready yet."))
-    }
+    }, [username])
 
     return (
         <div className="view-profile">
@@ -182,25 +136,16 @@ export default function ViewProfile() {
                 !viewingOwn && userExists &&
                 <div>
                     <div className="view-profile--interactive">
-                        <div className="interactive--elem" title="DM user" onClick={handleDM}>
+                        <div className="interactive--elem" title="DM user">
                             <div className="interactive--active-area">
                                 <svg version="1.1" viewBox="0 0 24 24"><g className="st0" id="grid_system" /><g id="_icons"><path d="M18,5H6C5.1,5,4.1,5.3,3.4,5.9c0,0,0,0,0,0c0,0,0,0,0,0c0,0,0,0,0,0C2.5,6.7,2,7.8,2,9v6c0,2.2,1.8,4,4,4h12   c2.2,0,4-1.8,4-4V9c0-1.2-0.5-2.3-1.4-3.1C19.9,5.3,18.9,5,18,5z M18,7L13,10.9c-0.6,0.5-1.5,0.5-2.1,0L6,7H18z M20,15   c0,1.1-0.9,2-2,2H6c-1.1,0-2-0.9-2-2V9c0-0.3,0.1-0.6,0.2-0.9l5.5,4.4c0.7,0.5,1.5,0.8,2.3,0.8s1.6-0.3,2.3-0.8l5.5-4.4   C19.9,8.4,20,8.7,20,9V15z" /></g></svg>
                             </div>
                         </div>
-                        {isBlocking &&
-                            <div className="interactive--elem" title="Unblock user" onClick={() => handleBlock(false)}>
-                                <div className="interactive--active-area">
-                                    <svg className="block" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path d="M48,0A48,48,0,1,0,96,48,48.0512,48.0512,0,0,0,48,0Zm0,12a35.71,35.71,0,0,1,20.7993,6.7214L18.717,68.7935A35.8886,35.8886,0,0,1,48,12Zm0,72a35.71,35.71,0,0,1-20.7993-6.7214L77.283,27.2065A35.8886,35.8886,0,0,1,48,84Z" /></svg>
-                                </div>
+                        <div className="interactive--elem" title="Block user">
+                            <div className="interactive--active-area">
+                                <svg enable-background="new 0 0 32 32" height="32px" id="Capa_1" version="1.1" viewBox="0 0 32 32" width="32px" xmlSpace="preserve" xmlns="http://www.w3.org/2000/svg"><path d="M16,4c6.63,0,12,5.37,12,12s-5.37,12-12,12S4,22.63,4,16S9.37,4,16,4 M8.25,22.33L22.33,8.26C20.61,6.85,18.4,6,16,6  C10.49,6,6,10.49,6,16C6,18.4,6.85,20.61,8.25,22.33 M16,26c5.51,0,10-4.49,10-10c0-2.4-0.85-4.61-2.26-6.33L9.67,23.75  C11.39,25.15,13.6,26,16,26 M16,2C8.28,2,2,8.28,2,16s6.28,14,14,14s14-6.28,14-14S23.72,2,16,2L16,2z M8.632,19.12  C8.219,18.139,8,17.076,8,16c0-4.411,3.589-8,8-8c1.079,0,2.143,0.22,3.124,0.636L8.632,19.12L8.632,19.12z M12.88,23.368  l10.484-10.492C23.78,13.857,24,14.921,24,16c0,4.411-3.589,8-8,8C14.924,24,13.861,23.781,12.88,23.368L12.88,23.368z" /><g /><g /><g /><g /><g /><g /></svg>
                             </div>
-                        }
-                        {!isBlocking &&
-                            <div className="interactive--elem" title="Block user" onClick={() => handleBlock(true)}>
-                                <div className="interactive--active-area">
-                                    <svg enable-background="new 0 0 32 32" height="32px" id="Capa_1" version="1.1" viewBox="0 0 32 32" width="32px" xmlSpace="preserve" xmlns="http://www.w3.org/2000/svg"><path d="M16,4c6.63,0,12,5.37,12,12s-5.37,12-12,12S4,22.63,4,16S9.37,4,16,4 M8.25,22.33L22.33,8.26C20.61,6.85,18.4,6,16,6  C10.49,6,6,10.49,6,16C6,18.4,6.85,20.61,8.25,22.33 M16,26c5.51,0,10-4.49,10-10c0-2.4-0.85-4.61-2.26-6.33L9.67,23.75  C11.39,25.15,13.6,26,16,26 M16,2C8.28,2,2,8.28,2,16s6.28,14,14,14s14-6.28,14-14S23.72,2,16,2L16,2z M8.632,19.12  C8.219,18.139,8,17.076,8,16c0-4.411,3.589-8,8-8c1.079,0,2.143,0.22,3.124,0.636L8.632,19.12L8.632,19.12z M12.88,23.368  l10.484-10.492C23.78,13.857,24,14.921,24,16c0,4.411-3.589,8-8,8C14.924,24,13.861,23.781,12.88,23.368L12.88,23.368z" /><g /><g /><g /><g /><g /><g /></svg>
-                                </div>
-                            </div>
-                        }
+                        </div>
                     </div>
                 </div>
             }
