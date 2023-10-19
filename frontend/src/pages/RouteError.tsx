@@ -3,6 +3,7 @@ import Sidebar from "../components/Sidebar"
 import WentWrong from "../components/WentWrong"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { HeaderMode, removeErrorMessage, setHeaderMode } from "../app/appState"
+import { useEffect } from "react"
 
 export default function RouteError() {
     const errors = useAppSelector((state) => state.errorMessages)
@@ -12,7 +13,9 @@ export default function RouteError() {
         dispatch(removeErrorMessage(index))
     }
 
-    dispatch(setHeaderMode(HeaderMode.NONE))
+    useEffect(() => {
+        dispatch(setHeaderMode(HeaderMode.NONE))
+    })
 
     return (
         <>

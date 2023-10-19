@@ -11,6 +11,7 @@ import CreateOrEditAccount from './pages/CreateAccount';
 import ViewProfile from './pages/ViewProfile';
 import RouteError from './pages/RouteError';
 import WentWrong from './components/WentWrong';
+import ViewBlockedHandles from './pages/ViewBlockedHandles';
 
 const router = createBrowserRouter([
   {
@@ -22,12 +23,16 @@ const router = createBrowserRouter([
         element: <Home />
       },
       {
-        path: "create-account",
+        path: "/create-account",
         element: <CreateOrEditAccount />
       },
       {
         path: "/u/:username",
-        element: <ViewProfile />
+        element: <ViewProfile />,
+      },
+      {
+        path: "/blocked",
+        element: <ViewBlockedHandles />
       },
       {
         path: "/error",

@@ -9,7 +9,7 @@ export default function Header() {
     const dispatch = useAppDispatch()
     const navigate = useNavigate()
 
-    const isLoggedIn = useAppSelector((state) => state.tokenId ? true : false)
+    const token = useAppSelector((state) => state.tokenId)
     const userExists = useAppSelector((state) => state.userExists)
     const headerMode = useAppSelector((state) => state.headerMode)
 
@@ -33,9 +33,13 @@ export default function Header() {
         navigate("/create-account")
     }
 
+    const navigateToBlockList = () => {
+        navigate("/blocked")
+    }
+
     const logoutAndNavigate = () => {
         dispatch(logout())
-        navigate("")
+        navigate("/")
         googleLogout()
     }
 
@@ -48,7 +52,10 @@ export default function Header() {
                     </Link>
                 </div>
                 {headerMode === HeaderMode.CAN_EDIT_PROFILE &&
-                    <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Edit Profile</button>
+                    <>
+                        <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Edit Profile</button>
+                        <button className="linkButton" onClick={navigateToBlockList}>Blocked handles</button>
+                    </>
                 }
             </div>
             <div className="header--group">
@@ -57,9 +64,9 @@ export default function Header() {
                         console.log("DB cleared")
                     })
                 }}>Clear DB</button>
-                {isLoggedIn && !userExists && <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Create Account</button>}
+                {token && !userExists && <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Create Account</button>}
                 <div>
-                    {isLoggedIn ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
+                    {token ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
                         onSuccess={credentialResponse}
                         onError={() => {
                             dispatch(addErrorMessage("Error - unable to login."))

@@ -1,7 +1,7 @@
 import { useDispatch } from "react-redux"
 import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
 import { useAppSelector } from "../app/hooks"
-import { ChangeEvent, FormEvent, useState } from "react"
+import { ChangeEvent, FormEvent, useState, useEffect } from "react"
 import doAPICall from "../app/apiLayer"
 import { useNavigate } from "react-router-dom"
 
@@ -14,7 +14,9 @@ export default function Home() {
     const dispatch = useDispatch()
     const navigate = useNavigate()
 
-    dispatch(setHeaderMode(HeaderMode.NONE))
+    useEffect(() => {
+        dispatch(setHeaderMode(HeaderMode.NONE))
+    }, [])
 
     const navigateToFeed = () => {
         console.log("Navigate to Feed")

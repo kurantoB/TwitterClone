@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useState } from "react"
+import { ChangeEvent, FormEvent, useState, useEffect } from "react"
 import consts from "../consts"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import doAPICall from "../app/apiLayer"
@@ -24,7 +24,9 @@ export default function CreateOrEditAccount() {
     const navigate = useNavigate()
     const accessToken = useAppSelector((state) => state.tokenId)
 
-    dispatch(setHeaderMode(HeaderMode.NONE))
+    useEffect(() => {
+        dispatch(setHeaderMode(HeaderMode.NONE))
+    }, [])
 
     const handleFormSubmit = (event: FormEvent) => {
         event.preventDefault()

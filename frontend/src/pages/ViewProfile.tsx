@@ -160,7 +160,7 @@ export default function ViewProfile() {
                 <p>This user has you blocked. You are disallowed from viewing their profile, following them, DMing them, or interacting with their posts.</p>
                 <div>
                     {isBlocking &&
-                        <div className="interactive--elem" title="Unblock user" onClick={() => handleBlock(false)}>
+                        <div className="interactive--elem" title="Unblock handle" onClick={() => handleBlock(false)}>
                             <div className="interactive--active-area">
                                 <svg className="block" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path d="M48,0A48,48,0,1,0,96,48,48.0512,48.0512,0,0,0,48,0Zm0,12a35.71,35.71,0,0,1,20.7993,6.7214L18.717,68.7935A35.8886,35.8886,0,0,1,48,12Zm0,72a35.71,35.71,0,0,1-20.7993-6.7214L77.283,27.2065A35.8886,35.8886,0,0,1,48,84Z" /></svg>
                             </div>
@@ -220,14 +220,14 @@ export default function ViewProfile() {
                             </div>
                         </div>
                         {isBlocking &&
-                            <div className="interactive--elem" title="Unblock user" onClick={() => handleBlock(false)}>
+                            <div className="interactive--elem" title="Unblock handle" onClick={() => handleBlock(false)}>
                                 <div className="interactive--active-area">
                                     <svg className="block" viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg"><path d="M48,0A48,48,0,1,0,96,48,48.0512,48.0512,0,0,0,48,0Zm0,12a35.71,35.71,0,0,1,20.7993,6.7214L18.717,68.7935A35.8886,35.8886,0,0,1,48,12Zm0,72a35.71,35.71,0,0,1-20.7993-6.7214L77.283,27.2065A35.8886,35.8886,0,0,1,48,84Z" /></svg>
                                 </div>
                             </div>
                         }
                         {!isBlocking &&
-                            <div className="interactive--elem" title="Block user" onClick={() => handleBlock(true)}>
+                            <div className="interactive--elem" title="Block handle" onClick={() => handleBlock(true)}>
                                 <div className="interactive--active-area">
                                     <svg enable-background="new 0 0 32 32" height="32px" id="Capa_1" version="1.1" viewBox="0 0 32 32" width="32px" xmlSpace="preserve" xmlns="http://www.w3.org/2000/svg"><path d="M16,4c6.63,0,12,5.37,12,12s-5.37,12-12,12S4,22.63,4,16S9.37,4,16,4 M8.25,22.33L22.33,8.26C20.61,6.85,18.4,6,16,6  C10.49,6,6,10.49,6,16C6,18.4,6.85,20.61,8.25,22.33 M16,26c5.51,0,10-4.49,10-10c0-2.4-0.85-4.61-2.26-6.33L9.67,23.75  C11.39,25.15,13.6,26,16,26 M16,2C8.28,2,2,8.28,2,16s6.28,14,14,14s14-6.28,14-14S23.72,2,16,2L16,2z M8.632,19.12  C8.219,18.139,8,17.076,8,16c0-4.411,3.589-8,8-8c1.079,0,2.143,0.22,3.124,0.636L8.632,19.12L8.632,19.12z M12.88,23.368  l10.484-10.492C23.78,13.857,24,14.921,24,16c0,4.411-3.589,8-8,8C14.924,24,13.861,23.781,12.88,23.368L12.88,23.368z" /><g /><g /><g /><g /><g /><g /></svg>
                                 </div>

@@ -25,9 +25,9 @@ export default function doAPICall(
     effectDependency: any = null
 ) {
     if (effectDependencyName === "") {
-        dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
+        // dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
     } else {
-        dispatch(addErrorMessage(`Making API call: ${method} ${route} per change in ${effectDependencyName}: ${JSON.stringify(effectDependency)}`))
+        // dispatch(addErrorMessage(`Making API call: ${method} ${route} per change in ${effectDependencyName}: ${JSON.stringify(effectDependency)}`))
     }
     const axiosInstance = axios.create({
         baseURL: process.env.REACT_APP_BASE_URL
@@ -70,7 +70,7 @@ export default function doAPICall(
                     dispatch(addErrorMessage("Request failed - unauthorized"))
                     dispatch(logout())
                     if (navigate) {
-                        navigate("")
+                        navigate("/")
                     }
                     googleLogout()
                 } else {
