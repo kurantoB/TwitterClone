@@ -1,11 +1,11 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { blockUser, follow, followHook, getFollowRelationship, initialize as initializePersistence, isBlockedBy, isBlocking, unblockUser, unfollow } from "./persistence"
+import { blockUser, follow, followHook, getBlocklist, getFollowRelationship, initialize as initializePersistence, isBlockedBy, isBlocking, unblockUser, unfollow } from "./persistence"
 import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
-import { OAuth2Client, TokenPayload } from "google-auth-library"
+import { LoginTicket, OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
 import { getUserHasAvatar } from "./api/generalAPI"
@@ -26,28 +26,42 @@ initializePersistence().then(async () => {
 
 // Middleware to verify JWT tokens
 async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
-    verifyTokenHelper(req.headers.authorization, async () => {
-        res.sendStatus(401)
-    }).then((tokenPayload) => {
-        req.user = tokenPayload
-        next()
-    }).catch((error) => {
-        res.sendStatus(401)
-    })
+    verifyTokenHelper(
+        req.headers.authorization,
+        async () => {
+            res.sendStatus(401)
+        },
+        async (token) => {
+            req.user = token
+            next()
+        },
+        (error) => {
+            res.sendStatus(401)
+        }
+    )
 }
 
-async function verifyTokenHelper(authorizationHeader: string, noTokenCallback: () => Promise<void>): Promise<TokenPayload> {
+async function verifyTokenHelper(
+    authorizationHeader: string,
+    noTokenCallback: () => Promise<void>,
+    tokenCallback: (tokenPayload: TokenPayload) => Promise<void>,
+    verifyError: (error: Error) => void
+): Promise<void> {
     if (authorizationHeader) {
         const token = authorizationHeader.split(' ')[1]
         const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-        const ticket = await client.verifyIdToken({
-            idToken: token,
-            audience: process.env.GOOGLE_CLIENT_ID
-        })
-        return ticket.getPayload()
+        let ticket: LoginTicket
+        try {
+            ticket = await client.verifyIdToken({
+                idToken: token,
+                audience: process.env.GOOGLE_CLIENT_ID
+            })
+        } catch (error) {
+            verifyError(error)
+        }
+        await tokenCallback(ticket.getPayload())
     } else {
         await noTokenCallback()
-        return null
     }
 }
 
@@ -87,24 +101,29 @@ function startServer() {
 
     app.get('/get-profile/:username', async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            await verifyTokenHelper(req.headers.authorization, async () => { })
-                .then(async (tokenPayload) => {
-                    const userBeingViewed = await getUserByUsername(req.params.username)
-                    if (!userBeingViewed) {
-                        throw new Error("User not found.")
-                    }
-                    if (!tokenPayload) {
-                        return callback({
-                            user: userBeingViewed,
-                            viewingOwn: false
-                        })
-                    }
-                    const viewingOwn = userBeingViewed.googleid === tokenPayload.sub
+            const userBeingViewed = await getUserByUsername(req.params.username)
+            if (!userBeingViewed) {
+                throw new Error("User not found.")
+            }
+            await verifyTokenHelper(
+                req.headers.authorization,
+                async () => {
+                    return callback({
+                        user: userBeingViewed,
+                        viewingOwn: false
+                    })
+                },
+                async (token) => {
+                    const viewingOwn = userBeingViewed.googleid === token.sub
                     callback({
                         user: userBeingViewed,
                         viewingOwn
                     })
-                })
+                },
+                (error) => {
+                    res.sendStatus(401)
+                }
+            )
         })
     })
 
@@ -133,6 +152,13 @@ function startServer() {
         await wrapAPICall(req, res, async (req, callback) => {
             await unblockUser(req.user.sub, req.params.targetuserid)
             callback("OK")
+        })
+    })
+
+    app.get('/get-blocklist', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const blockedUsernames = await getBlocklist(req.user.sub)
+            callback({ blockedUsernames })
         })
     })
 

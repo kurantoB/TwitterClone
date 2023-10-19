@@ -469,6 +469,16 @@ export async function isBlockedBy(googleid: string, targetUserId: string) {
     return loadedTargetUser.blockedUsers.some((user) => user.googleid === googleid)
 }
 
+export async function getBlocklist(googleid: string) {
+    const loadedUser = await AppDataSource.getRepository(User).findOne({
+        relations: { blockedUsers: true },
+        where: { googleid }
+    })
+    return loadedUser.blockedUsers.sort((a, b) => {
+        return a.username.localeCompare(b.username)
+    }).map((user) => user.username)
+}
+
 
 
 // DMs
