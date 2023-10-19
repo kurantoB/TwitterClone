@@ -76,7 +76,7 @@ export default function ViewProfile() {
                 doAPICall('GET', `/is-blocked-by/${profileBody.user.id}`, dispatch, navigate, token, (blockedByBody) => {
                     if (blockedByBody.isBlockedBy) {
                         setIsBlockedBy(true)
-                        doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (isBlockedBody) => {
+                        doAPICall('GET', `/is-blocked/${profileBody.user!.id}`, dispatch, navigate, token, (isBlockedBody) => {
                             setIsBlocking(isBlockedBody.isBlocking)
                         }, null, undefined, "userExists, username", [userExists, username])
                     } else {
@@ -134,6 +134,16 @@ export default function ViewProfile() {
         }
         doAPICall('GET', `/${action ? "block" : "unblock"}/${user.id}`, dispatch, navigate, token, (_) => {
             setIsBlocking(action)
+            if (!isBlockedBy && action) {
+                setUser({
+                    ...user,
+                    followerCount: following ? user.followerCount - 1 : user.followerCount,
+                    followingCount: followedBy ? user.followingCount - 1 : user.followingCount,
+                    mutualCount: following && followedBy ? user.mutualCount - 1 : user.mutualCount
+                })
+                setFollowing(false)
+                setFollowedBy(false)
+            }
         })
     }
 
@@ -177,7 +187,7 @@ export default function ViewProfile() {
                     shortBio={user ? user.shortBio : ""}
                 />
             </div>
-            {userExists && !viewingOwn &&
+            {userExists && !viewingOwn && !isBlocking &&
                 <>
                     <div>
                         {following && followedBy && <h3 className="view-profile--sticker">Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
