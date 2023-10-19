@@ -319,16 +319,28 @@ async function handleFollow(sourceUserGoogleId: string, targetUserId: string, ac
         const loadedSourceUser = await em.findOne(User, {
             relations: {
                 following: true,
-                followers: true
+                followers: true,
+                blockedUsers: true
             },
             where: { googleid: sourceUserGoogleId }
         })
         if (!loadedSourceUser) {
             throw new Error("Unable to retrieve user using token.")
         }
-        let loadedTargetUser = await em.findOneBy(User, { id: targetUserId })
+        let loadedTargetUser = await em.findOne(User, {
+            relations: {
+                blockedUsers: true
+            },
+            where: { id: targetUserId }
+        })
         if (!loadedTargetUser) {
             throw new Error("Unable to retrieve user by ID.")
+        }
+        if (action && loadedTargetUser.blockedUsers.some((user) => user.googleid === sourceUserGoogleId)) {
+            throw new Error("Unable to follow - source user is blocked.")
+        }
+        if (action && loadedSourceUser.blockedUsers.some((user) => user.id === targetUserId)) {
+            throw new Error("Unable to follow - target user is blocked.")
         }
 
         let mutualDelta = 0
@@ -452,7 +464,7 @@ export async function isBlocking(googleid: string, targetUserId: string) {
 export async function isBlockedBy(googleid: string, targetUserId: string) {
     const loadedTargetUser = await AppDataSource.getRepository(User).findOne({
         relations: { blockedUsers: true },
-        where: {id: targetUserId }
+        where: { id: targetUserId }
     })
     return loadedTargetUser.blockedUsers.some((user) => user.googleid === googleid)
 }
