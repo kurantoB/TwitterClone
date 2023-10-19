@@ -66,11 +66,11 @@ export default function CreateOrEditAccount() {
             dispatch,
             navigate,
             accessToken,
-            (body) => {
-                if (body.formErrors) {
-                    for (const i in body.formErrors) {
-                        const message = body.formErrors[i].split('/')[1]
-                        switch (body.formErrors[i].split('/')[0]) {
+            (createAccountBody) => {
+                if (createAccountBody.formErrors) {
+                    for (const i in createAccountBody.formErrors) {
+                        const message = createAccountBody.formErrors[i].split('/')[1]
+                        switch (createAccountBody.formErrors[i].split('/')[0]) {
                             case 'avatar':
                                 setAvatarError(message)
                                 break
@@ -85,10 +85,10 @@ export default function CreateOrEditAccount() {
                     dispatch(addErrorMessage("Unable to create account - please fix the below issues before retrying."))
                     window.scrollTo({ top: 0, behavior: 'smooth' })
                 } else {
-                    doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
+                    doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (userIdBody) => {
                         dispatch(findUser())
                         // user account exists for this Google ID - connect to websocket service
-                        connectSocket(body.userId, dispatch)
+                        connectSocket(userIdBody.userId, dispatch)
                         navigate(`/u/${username}`)
                     })
                 }

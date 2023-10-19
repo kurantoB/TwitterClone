@@ -6,13 +6,13 @@ import doAPICall from "../app/apiLayer"
 import { useNavigate } from "react-router-dom"
 
 export default function Home() {
+    // const token = useAppSelector((state) => state.tokenId)
+
     const [username, setUsername] = useState<string>("")
     const [usernameError, setUsernameError] = useState<string | null>(null)
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
-
-    const accessToken = useAppSelector((state) => state.tokenId)
 
     dispatch(setHeaderMode(HeaderMode.NONE))
 
@@ -51,7 +51,7 @@ export default function Home() {
                         {usernameError && <p className="find-user--error">{usernameError}</p>}
                     </form>
                 </div>
-                {/* {accessToken && <p>Testing only - your authentication token is {accessToken}</p>} */}
+                {/* {token && <p>Testing only - your authentication token is {accessToken}</p>} */}
             </section>
         </div>
     )

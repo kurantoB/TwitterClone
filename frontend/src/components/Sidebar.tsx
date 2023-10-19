@@ -3,7 +3,7 @@ import doAPICall from "../app/apiLayer"
 import { useAppSelector } from "../app/hooks"
 import consts from "../consts"
 import { useState, useEffect } from 'react'
-import { addErrorMessage, findUser } from "../app/appState"
+import { addErrorMessage } from "../app/appState"
 import { useNavigate } from "react-router-dom"
 
 export default function Sidebar() {
@@ -14,23 +14,23 @@ export default function Sidebar() {
     const navigate = useNavigate()
 
     useEffect(() => {
-        if (!accessToken || !userExists) {
+        if (!userExists) {
             return
         }
-        doAPICall('GET', '/has-avatar', dispatch, navigate, accessToken, (body) => {
-            if (body.hasAvatar) {
-                doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
-                    const filePath = `${body.userId}_avatar`
+        doAPICall('GET', '/has-avatar', dispatch, navigate, accessToken, (avatarBody) => {
+            if (avatarBody.hasAvatar) {
+                doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (userIdBody) => {
+                    const filePath = `${userIdBody.userId}_avatar`
                     const fileURL = `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
                     setAvatarUrl(fileURL)
-                })
+                }, null, undefined, "userExists", userExists)
             } else {
                 setAvatarUrl(`${window.location.origin}/images/user_icon.png`)
             }
-        })
+        }, null, undefined, "userExists", userExists)
     }, [userExists])
 
-    if (!accessToken || !userExists) {
+    if (!userExists) {
         return <div></div>
     }
 
