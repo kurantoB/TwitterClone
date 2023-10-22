@@ -141,14 +141,14 @@ function startServer() {
         })
     })
 
-    app.get('/block/:targetuserid', verifyToken, async (req, res) => {
+    app.patch('/block/:targetuserid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             await blockUser(req.user.sub, req.params.targetuserid)
             callback("OK")
         })
     })
 
-    app.get('/unblock/:targetuserid', verifyToken, async (req, res) => {
+    app.patch('/unblock/:targetuserid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             await unblockUser(req.user.sub, req.params.targetuserid)
             callback("OK")
@@ -185,7 +185,7 @@ function startServer() {
         })
     })
 
-    app.post('/api/create-account', verifyToken, async (req, res) => {
+    app.post('/create-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             const googleid = req.user.sub
             if (await getUserIdFromToken(googleid)) {
@@ -195,15 +195,15 @@ function startServer() {
         })
     })
 
-    app.patch('/api/update-account', verifyToken, async (req, res) => {
+    app.patch('/update-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             handleCreateOrUpdateAccount(req, callback, await getUserIdFromToken(req.user.sub))
         })
     })
 
-    app.delete('/api/delete-account', verifyToken, async (req, res) => {
+    app.delete('/delete-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            await deleteUser(await getUserIdFromToken(req.user.sub), callback)
+            await deleteUser(req.user.sub, callback)
         })
     })
 
@@ -270,19 +270,21 @@ function handleCreateOrUpdateAccount(
         files: Files
     ) => {
         if (err) {
-            throw new Error(`Failed to read account creation request: ${err.message}`)
+            throw new Error(`Failed to read account creation or update request: ${err.message}`)
         }
         const formErrors: string[] = []
-        if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
-            formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
-        } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
-            formErrors.push("Only letters, numbers, and underscores are permitted in the handle.")
+        if (!userId) {
+            if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
+                formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
+            } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
+                formErrors.push("Only letters, numbers, and underscores are permitted in the handle.")
+            }
         }
         if (fields.bio[0].length > consts.MAX_BIO_LENGTH) {
             formErrors.push(`bio/Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
         }
         if (fields.shortBio[0].length > consts.MAX_SHORT_BIO_LENGTH) {
-            formErrors.push(`bio/Caption must not exceed ${consts.MAX_SHORT_BIO_LENGTH} characters.`)
+            formErrors.push(`shortBio/Caption must not exceed ${consts.MAX_SHORT_BIO_LENGTH} characters.`)
         }
 
         if (files.file && files.file[0].size > 0) {
@@ -305,7 +307,7 @@ function handleCreateOrUpdateAccount(
             await createOrUpdateAccount(
                 userId,
                 req.user.sub,
-                fields.username[0],
+                !userId ? fields.username[0] : null,
                 fields.bio[0],
                 fields.shortBio[0],
                 uploadedFile ? uploadedFile.filepath : null,

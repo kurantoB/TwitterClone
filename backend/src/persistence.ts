@@ -1,4 +1,4 @@
-import { EntityManager, ILike, IsNull } from "typeorm";
+import { EntityManager, IsNull } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -27,21 +27,38 @@ export async function getUserByUsername(username: string) {
         .findOneBy({ username })
 }
 
-export async function deleteUser(userId: string) {
+export async function deleteUser(googleid: string) {
+    const user = await AppDataSource
+        .getRepository(User)
+        .findOne({
+            relations: {
+                followers: true,
+                following: true
+            },
+            where: { googleid }
+        })
+    
+    for (const follower of user.followers) {
+        await unfollow(follower.googleid, user.id)
+    }
+    for (const followed of user.following) {
+        await unfollow(user.googleid, followed.id)
+    }
+
     const dmsToDelete = await AppDataSource.getRepository(DM).find({
         where: [
             {
-                sender: { id: userId },
+                sender: { id: user.id },
                 recipient: IsNull()
             },
             {
                 sender: IsNull(),
-                recipient: { id: userId }
+                recipient: { id: user.id }
             }
         ]
     })
     await AppDataSource.getRepository(DM).remove(dmsToDelete)
-    return await AppDataSource.getRepository(User).delete(userId)
+    return await AppDataSource.getRepository(User).remove(user)
 }
 
 export async function createOrUpdateAccountHelper(
@@ -62,8 +79,6 @@ export async function createOrUpdateAccountHelper(
             }
             user = new User()
             user.googleid = googleid
-        }
-        if (username !== user.username) {
             const alreadyExists = await em.find(User, {
                 where: { username }
             }).then((users) => users.length > 0)

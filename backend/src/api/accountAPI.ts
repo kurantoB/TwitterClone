@@ -10,7 +10,7 @@ export async function getUserByUsername(username: string) {
 export async function createOrUpdateAccount(
     userId: string, // is falsy if this is account creation
     googleid: string,
-    username: string,
+    username: string, // is null if this is edit profile
     bio: string,
     shortBio: string,
     avatarUploadFilename: string,
@@ -54,12 +54,11 @@ export async function createOrUpdateAccount(
 }
 
 export async function deleteUser(
-    userId: string,
+    googleid: string,
     callback: (responseVal: any) => void
 ) {
-    const avatarFilename = await Persistence.getUserAvatar(userId)
-
-    await Persistence.deleteUser(userId)
+    const avatarFilename = await Persistence.getUserAvatar(googleid)
+    await Persistence.deleteUser(googleid)
     // send the response back to the client before doing cloud storage operations
     callback("OK")
 
