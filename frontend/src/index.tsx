@@ -7,11 +7,12 @@ import { Provider } from 'react-redux';
 import store from './app/store';
 import Home from './pages/Home'
 import { GoogleOAuthProvider } from '@react-oauth/google'
-import CreateOrEditAccount from './pages/CreateAccount';
+import CreateOrEditAccount from './pages/CreateOrEditAccount';
 import ViewProfile from './pages/ViewProfile';
 import RouteError from './pages/RouteError';
 import WentWrong from './components/WentWrong';
 import ViewBlockedHandles from './pages/ViewBlockedHandles';
+import { useAppSelector } from './app/hooks';
 
 const router = createBrowserRouter([
   {
@@ -24,7 +25,7 @@ const router = createBrowserRouter([
       },
       {
         path: "/create-account",
-        element: <CreateOrEditAccount />
+        element: <CreateOrEditAccount edit={false} />
       },
       {
         path: "/u/:username",
@@ -33,6 +34,10 @@ const router = createBrowserRouter([
       {
         path: "/blocked",
         element: <ViewBlockedHandles />
+      },
+      {
+        path: "/edit-profile",
+        element: <CreateOrEditAccount edit={true} />
       },
       {
         path: "/error",

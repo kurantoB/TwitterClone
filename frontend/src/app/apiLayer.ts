@@ -20,6 +20,7 @@ export default function doAPICall(
     errorCallback: (error: string, body: any) => void = (error, body) => {
         dispatch(addErrorMessage(error))
         console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     },
     effectDependencyName: string = "",
     effectDependency: any = null

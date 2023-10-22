@@ -9,7 +9,7 @@ import { format } from "date-fns"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
 
-type User = {
+export type User = {
     id: string
     username: string
     avatar: string
@@ -132,7 +132,7 @@ export default function ViewProfile() {
         if (!user) {
             return
         }
-        doAPICall('GET', `/${action ? "block" : "unblock"}/${user.id}`, dispatch, navigate, token, (_) => {
+        doAPICall('PATCH', `/${action ? "block" : "unblock"}/${user.id}`, dispatch, navigate, token, (_) => {
             setIsBlocking(action)
             if (!isBlockedBy && action) {
                 setUser({

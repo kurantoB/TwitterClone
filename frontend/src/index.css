@@ -228,6 +228,36 @@ a:visited {
   width: 100%;
 }
 
+.modal {
+  display: none;
+  position: fixed; /* Stay in place */
+  z-index: 1; /* Sit on top */
+  left: 0;
+  top: 0;
+  width: 100%; /* Full width */
+  height: 100%; /* Full height */
+  background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
+}
+
+.modal-content {
+  margin: 15% auto; /* 15% from the top and centered */
+  padding: 20px;
+  border: 1px solid white;
+  width: 50%;
+  background-color: black;
+  display: flex;
+  justify-content: space-between;
+}
+
+.modal-options {
+  display: flex;
+  align-items: center;
+}
+
+.modal-options > button {
+  padding: 12px;
+}
+
 /* Home */
 
 .home--content {

@@ -25,7 +25,7 @@ const initialState: AppState = {
     headerMode: HeaderMode.NONE,
     websocket: null,
     newNotifCount: 0,
-    userIdToDMCount: {}
+    userIdToDMCount: {},
 }
 
 const appState = createSlice({
@@ -92,5 +92,5 @@ export const {
     resetDMsFromUser,
     addErrorMessage,
     removeErrorMessage,
-    setHeaderMode
+    setHeaderMode,
 } = appState.actions

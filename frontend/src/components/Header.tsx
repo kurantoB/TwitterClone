@@ -24,13 +24,19 @@ export default function Header() {
             }, null, (error, body) => {
                 if (error !== "User not found.") {
                     dispatch(addErrorMessage(error))
+                    console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
+                    window.scrollTo({ top: 0, behavior: 'smooth' })
                 }
             })
         }
     }
 
-    const navigateToCreateOrEditAccount = () => {
+    const navigateToCreateAccount = () => {
         navigate("/create-account")
+    }
+
+    const navigateToEditProfile = () => {
+        navigate("/edit-profile")
     }
 
     const navigateToBlockList = () => {
@@ -53,7 +59,7 @@ export default function Header() {
                 </div>
                 {headerMode === HeaderMode.CAN_EDIT_PROFILE &&
                     <>
-                        <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Edit Profile</button>
+                        <button className="linkButton" onClick={navigateToEditProfile}>Edit Profile</button>
                         <button className="linkButton" onClick={navigateToBlockList}>Blocked handles</button>
                     </>
                 }
@@ -64,7 +70,7 @@ export default function Header() {
                         console.log("DB cleared")
                     })
                 }}>Clear DB</button>
-                {token && !userExists && <button className="linkButton" onClick={navigateToCreateOrEditAccount}>Create Account</button>}
+                {token && !userExists && <button className="linkButton" onClick={navigateToCreateAccount}>Create Account</button>}
                 <div>
                     {token ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
                         onSuccess={credentialResponse}

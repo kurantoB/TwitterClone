@@ -29,7 +29,7 @@ export default function Home() {
         doAPICall('GET', `/get-profile/${username}`, dispatch, null, null, (body) => {
             navigate(`/u/${username}`)
         }, null, (error, body) => {
-            setUsernameError("Sorry, no user exists with that handle.")
+            setUsernameError("Sorry, failed to find user with that handle.")
         })
     }
 
