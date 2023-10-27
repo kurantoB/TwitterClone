@@ -2,6 +2,12 @@ import express from "express"
 import https from 'https'
 import fs from 'fs'
 import { blockUser, follow, followHook, getBlocklist, getFollowRelationship, initialize as initializePersistence, isBlockedBy, isBlocking, unblockUser, unfollow } from "./persistence"
+import { getAllFollowers, getAllFollowing, getAllMutuals, getCommonFollowing, getSpecificFollowers, getSpecificFollowing } from "./api/followInfoAPI"
+import { getCommonFollowers } from "./api/followInfoAPI"
+import { getUnacquaintedMutuals } from "./api/followInfoAPI"
+import { getMutualsYouFollow } from "./api/followInfoAPI"
+import { getMutualsFollowingYou } from "./api/followInfoAPI"
+import { getSharedMutuals } from "./api/followInfoAPI"
 import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
@@ -9,7 +15,7 @@ import { LoginTicket, OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
 import { getUserHasAvatar } from "./api/generalAPI"
-import testDB, { clearDB } from "./dbtest"
+import testDB, { clearDB, testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 
 /*
@@ -20,6 +26,7 @@ Requests that fail will be in the format { error }
 configDotenv()
 
 initializePersistence().then(async () => {
+    // await testDB2()
     // await testDB()
     startServer()
 })
@@ -86,6 +93,13 @@ function startServer() {
                 throw new Error("User not found.")
             }
             callback({ userId })
+        })
+    })
+
+    app.get('/has-avatar', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const hasAvatar = await getUserHasAvatar(req.user.sub)
+            callback({ hasAvatar })
         })
     })
 
@@ -185,6 +199,127 @@ function startServer() {
         })
     })
 
+    app.get('/shared-mutuals/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getSharedMutuals(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/mutuals-following-you/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getMutualsFollowingYou(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/mutuals-you-follow/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getMutualsYouFollow(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/unacquainted-mutuals/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getUnacquaintedMutuals(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/common-followers/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getCommonFollowers(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/specific-followers/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getSpecificFollowers(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/common-following/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getCommonFollowing(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/specific-following/:targetuserid/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getSpecificFollowing(userId, req.params.targetuserid, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/all-mutuals/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getAllMutuals(userId, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/all-followers/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getAllFollowers(userId, offset, amount)
+            callback({ usernames })
+        })
+    })
+
+    app.get('/all-following/:batchnum', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const userId = await getUserIdFromToken(req.user.sub)
+            const convertedBatchNum = parseInt(req.params.batchnum)
+            const amount = consts.HANDLE_BATCH_SIZE
+            const offset = convertedBatchNum * amount
+            const usernames = await getAllFollowing(userId, offset, amount)
+            callback({ usernames })
+        })
+    })
+
     app.post('/create-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             const googleid = req.user.sub
@@ -204,13 +339,6 @@ function startServer() {
     app.delete('/delete-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             await deleteUser(req.user.sub, callback)
-        })
-    })
-
-    app.get('/has-avatar', verifyToken, async (req, res) => {
-        await wrapAPICall(req, res, async (req, callback) => {
-            const hasAvatar = await getUserHasAvatar(req.user.sub)
-            callback({ hasAvatar })
         })
     })
 

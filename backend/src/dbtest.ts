@@ -4,6 +4,9 @@ import { NotificationType } from "./entity/Notification"
 import { FeedActivityType } from "./entity/FeedActivity"
 import consts from "./consts"
 
+export async function testDB2() {
+}
+
 export async function clearDB() {
     await Persistence.clearDB()
 }
@@ -85,7 +88,7 @@ export default async function testDB() {
     conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
     kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
-    
+
     const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.")
     conditionalLog("Inserted new post: " + JSON.stringify(newPost))
     const newPostFeedActivity = await Persistence.postOrReplyHook(newPost)

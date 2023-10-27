@@ -1,4 +1,4 @@
-import { EntityManager, IsNull } from "typeorm";
+import { EntityManager, IsNull, SelectQueryBuilder } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -37,7 +37,7 @@ export async function deleteUser(googleid: string) {
             },
             where: { googleid }
         })
-    
+
     for (const follower of user.followers) {
         await unfollow(follower.googleid, user.id)
     }
@@ -120,11 +120,8 @@ export async function getUserAvatar(googleid: string) {
     }).then((user) => user.avatar)
 }
 
-
-
 // posts
 
-// message is checked for length beforehand
 export async function postOrReply(
     user: User,
     message: string,
@@ -134,12 +131,15 @@ export async function postOrReply(
         where: { author: { id: user.id } }
     })
     if (userPostCount >= consts.MAX_POSTS_PER_USER) {
-        throw new Error("Max number of posts per user exceeded")
+        throw new Error("Max number of posts per user exceeded.")
     }
 
     const newPost = new Post()
     newPost.author = user
     if (message.length > consts.MAX_POST_PREVIEW_LENGTH) {
+        if (message.length > consts.MAX_POST_LENGTH) {
+            throw new Error("Post is too long.")
+        }
         newPost.body = message.substring(0, consts.MAX_POST_PREVIEW_LENGTH)
         newPost.extension = message.substring(consts.MAX_POST_PREVIEW_LENGTH)
     } else {
