@@ -4,6 +4,8 @@ export default {
     MAX_BIO_LENGTH: 1680,
     MAX_SHORT_BIO_LENGTH: 140,
 
+    HANDLE_BATCH_SIZE: 5,
+
     CLOUD_STORAGE_ROOT: "https://storage.googleapis.com",
     CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars",
 }

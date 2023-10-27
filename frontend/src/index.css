@@ -86,7 +86,7 @@ a:visited {
 
 .nonheader {
   display: grid;
-  grid-template-columns: 158px auto 158px;
+  grid-template-columns: 158px calc(100vw - 316px) 158px;
 }
 
 .middle {
@@ -230,17 +230,23 @@ a:visited {
 
 .modal {
   display: none;
-  position: fixed; /* Stay in place */
-  z-index: 1; /* Sit on top */
+  position: fixed;
+  /* Stay in place */
+  z-index: 1;
+  /* Sit on top */
   left: 0;
   top: 0;
-  width: 100%; /* Full width */
-  height: 100%; /* Full height */
-  background-color: rgba(0,0,0,0.8); /* Black w/ opacity */
+  width: 100%;
+  /* Full width */
+  height: 100%;
+  /* Full height */
+  background-color: rgba(0, 0, 0, 0.8);
+  /* Black w/ opacity */
 }
 
 .modal-content {
-  margin: 15% auto; /* 15% from the top and centered */
+  margin: 15% auto;
+  /* 15% from the top and centered */
   padding: 20px;
   border: 1px solid white;
   width: 50%;
@@ -254,7 +260,7 @@ a:visited {
   align-items: center;
 }
 
-.modal-options > button {
+.modal-options>button {
   padding: 12px;
 }
 
@@ -279,7 +285,12 @@ a:visited {
   word-wrap: break-word
 }
 
-.home--content section h2 {
+.home--content .home--heading {
+  display: flex;
+  flex-direction: column;
+}
+
+.home--content section.home--heading h1 {
   font-size: 2rem;
 }
 
@@ -444,6 +455,58 @@ a:visited {
 
 .view-profile--lists>hr {
   width: 100%;
+}
+
+.view-profile--handles {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  overflow: auto;
+  height: 276px;
+}
+
+.view-profile--handle {
+  margin: 0 15px;
+}
+
+.view-profile--handle:hover {
+  cursor: pointer;
+  border-style: solid;
+  border-width: 4px;
+}
+
+.view-profile--loadmore {
+  height: 250px;
+  min-width: 180px;
+  margin: 0 15px;
+  padding: 0 30px;
+  position: relative;
+}
+
+.view-profile--loadmore:hover {
+  cursor: pointer;
+  border-style: solid;
+  border-width: 4px;
+}
+
+.view-profile--loadmore p {
+  top: 50%;
+  position: absolute;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.view-profile--empty {
+  height: 50px;
+  position: relative;
+}
+
+.view-profile--empty p {
+  margin: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .blocked-handles--listitem {

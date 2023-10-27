@@ -39,8 +39,13 @@ export default function Home() {
 
     return (
         <div className="home--content">
-            <section>
-                <h2>A Twitter clone <em>(for now)</em></h2>
+            <section className="home--heading">
+                <div>
+                    <h1>Welcome to Aloft.io</h1>
+                </div>
+                <div>
+                    <h2>an "indie Twitter"</h2>
+                </div>
             </section>
             <section>
                 <button className="largeButton" onClick={navigateToFeed}>View Community Feed</button>
@@ -53,7 +58,7 @@ export default function Home() {
                         {usernameError && <p className="find-user--error">{usernameError}</p>}
                     </form>
                 </div>
-                {token && <p>Testing only - your authentication token is {token}</p>}
+                {/* {token && <p>Testing only - your authentication token is {token}</p>} */}
             </section>
         </div>
     )

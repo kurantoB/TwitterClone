@@ -24,7 +24,7 @@ export default function ViewBlockedHandles() {
         <div className="view-profile">
             <h1>Blocked handles</h1>
             <div>
-                {blockedUsernames.length === 0 && <p>Empty</p>}
+                {blockedUsernames.length === 0 && <p>&lt;Empty&gt;</p>}
                 {blockedUsernames.map((blockedUsername) =>
                     <div key={blockedUsername} className="blocked-handles--listitem">
                         <Link to={`/u/${blockedUsername}`}>{blockedUsername}</Link>

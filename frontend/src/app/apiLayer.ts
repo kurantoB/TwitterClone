@@ -67,13 +67,17 @@ export default function doAPICall(
                 }
             })
             .catch((error) => {
-                if (error.response.status === 401) {
-                    dispatch(addErrorMessage("Request failed - unauthorized"))
-                    dispatch(logout())
-                    if (navigate) {
-                        navigate("/")
+                if (error.response) {
+                    if (error.response.status === 401) {
+                        dispatch(addErrorMessage("Request failed - unauthorized"))
+                        dispatch(logout())
+                        if (navigate) {
+                            navigate("/")
+                        }
+                        googleLogout()
+                    } else {
+                        dispatch(addErrorMessage(`Request failed - ${error.message}`))
                     }
-                    googleLogout()
                 } else {
                     dispatch(addErrorMessage(`Request failed - ${error.message}`))
                 }

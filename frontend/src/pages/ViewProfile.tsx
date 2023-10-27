@@ -3,11 +3,12 @@ import doAPICall from "../app/apiLayer"
 import { useDispatch } from "react-redux"
 import { useAppSelector } from "../app/hooks"
 import DisplayCard from "../components/DisplayCard"
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import consts from "../consts"
 import { format } from "date-fns"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
+import ScrollableHandles from "../components/ScrollableHandles"
 
 export type User = {
     id: string
@@ -41,6 +42,51 @@ export default function ViewProfile() {
         { display: "none" }
     ])
 
+    // other handles
+    const [sharedMutuals, setSharedMutuals] = useState<User[]>([])
+    const [sharedMutualsBatchNum, setSharedMutualsBatchNum] = useState(0)
+    const [hasMoreSharedMutuals, setHasMoreSharedMutuals] = useState(true)
+
+    const [mutualsFollowingYou, setMutualsFollowingYou] = useState<User[]>([])
+    const [mutualsFollowingYouBatchNum, setMutualsFollowingYouBatchNum] = useState(0)
+    const [hasMoreMutualsFollowingYou, setHasMoreMutualsFollowingYou] = useState(true)
+
+    const [mutualsYouFollow, setMutualsYouFollow] = useState<User[]>([])
+    const [mutualsYouFollowBatchNum, setMutualsYouFollowBatchNum] = useState(0)
+    const [hasMoreMutualsYouFollow, setHasMoreMutualsYouFollow] = useState(true)
+
+    const [unacquaintedMutuals, setUnacquaintedMutuals] = useState<User[]>([])
+    const [unacquaintedMutualsBatchNum, setUnacquaintedMutualsBatchNum] = useState(0)
+    const [hasMoreUnacquaintedMutuals, setHasMoreUnacquaintedMutuals] = useState(true)
+
+    const [commonFollowers, setCommonFollowers] = useState<User[]>([])
+    const [commonFollowersBatchNum, setCommonFollowersBatchNum] = useState(0)
+    const [hasMoreCommonFollowers, setHasMoreCommonFollowers] = useState(true)
+
+    const [specificFollowers, setSpecificFollowers] = useState<User[]>([])
+    const [specificFollowersBatchNum, setSpecificFollowersBatchNum] = useState(0)
+    const [hasMoreSpecificFollowers, setHasMoreSpecificFollowers] = useState(true)
+
+    const [commonFollowing, setCommonFollowing] = useState<User[]>([])
+    const [commonFollowingBatchNum, setCommonFollowingBatchNum] = useState(0)
+    const [hasMoreCommonFollowing, setHasMoreCommonFollowing] = useState(true)
+
+    const [specificFollowing, setSpecificFollowing] = useState<User[]>([])
+    const [specificFollowingBatchNum, setSpecificFollowingBatchNum] = useState(0)
+    const [hasMoreSpecificFollowing, setHasMoreSpecificFollowing] = useState(true)
+
+    const [allMutuals, setAllMutuals] = useState<User[]>([])
+    const [allMutualsBatchNum, setAllMutualsBatchNum] = useState(0)
+    const [hasMoreAllMutuals, setHasMoreAllMutuals] = useState(true)
+
+    const [allFollowers, setAllFollowers] = useState<User[]>([])
+    const [allFollowersBatchNum, setAllFollowersBatchNum] = useState(0)
+    const [hasMoreAllFollowers, setHasMoreAllFollowers] = useState(true)
+
+    const [allFollowing, setAllFollowing] = useState<User[]>([])
+    const [allFollowingBatchNum, setAllFollowingBatchNum] = useState(0)
+    const [hasMoreAllFollowing, setHasMoreAllFollowing] = useState(true)
+
     const accessProfile = (user: User, viewingOwn: boolean) => {
         if (userExists) {
             if (viewingOwn) {
@@ -62,6 +108,41 @@ export default function ViewProfile() {
         setFollowedBy(false)
         setIsBlocking(false)
         setIsBlockedBy(false)
+
+        setSharedMutuals([])
+        setHasMoreSharedMutuals(true)
+        setSharedMutualsBatchNum(0)
+        setMutualsFollowingYou([])
+        setHasMoreMutualsFollowingYou(true)
+        setMutualsFollowingYouBatchNum(0)
+        setMutualsYouFollow([])
+        setHasMoreMutualsYouFollow(true)
+        setMutualsYouFollowBatchNum(0)
+        setUnacquaintedMutuals([])
+        setHasMoreUnacquaintedMutuals(true)
+        setUnacquaintedMutualsBatchNum(0)
+        setCommonFollowers([])
+        setHasMoreCommonFollowers(true)
+        setCommonFollowersBatchNum(0)
+        setSpecificFollowers([])
+        setHasMoreSpecificFollowers(true)
+        setSpecificFollowersBatchNum(0)
+        setCommonFollowing([])
+        setHasMoreCommonFollowing(true)
+        setCommonFollowingBatchNum(0)
+        setSpecificFollowing([])
+        setHasMoreSpecificFollowing(true)
+        setSpecificFollowingBatchNum(0)
+        setAllMutuals([])
+        setHasMoreAllMutuals(true)
+        setAllMutualsBatchNum(0)
+        setAllFollowers([])
+        setHasMoreAllFollowers(true)
+        setAllFollowersBatchNum(0)
+        setAllFollowing([])
+        setHasMoreAllFollowing(true)
+        setAllFollowingBatchNum(0)
+
         doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (profileBody) => {
             dispatch(setHeaderMode(HeaderMode.NONE))
             setUser(profileBody.user)
@@ -72,6 +153,7 @@ export default function ViewProfile() {
             }
             if (profileBody.viewingOwn || !userExists) {
                 accessProfile(profileBody.user, profileBody.viewingOwn)
+                document.getElementById("view-profile--defaultopen")?.click()
             } else {
                 doAPICall('GET', `/is-blocked-by/${profileBody.user.id}`, dispatch, navigate, token, (blockedByBody) => {
                     if (blockedByBody.isBlockedBy) {
@@ -81,12 +163,23 @@ export default function ViewProfile() {
                         }, null, undefined, "userExists, username", [userExists, username])
                     } else {
                         accessProfile(profileBody.user, profileBody.viewingOwn)
+                        document.getElementById("view-profile--defaultopen")?.click()
+
+                        // populate shared mutuals
+                        nextHandleBatch(
+                            `/shared-mutuals/${profileBody.user.id}`,
+                            [],
+                            setSharedMutuals,
+                            0,
+                            setHasMoreSharedMutuals
+                        )
                     }
                 }, null, undefined, "userExists, username", [userExists, username])
             }
         }, null, (error, body) => {
             navigate("/error")
         }, "userExists, username", [userExists, username])
+        window.scrollTo({ top: 0, behavior: "instant" })
     }, [userExists, username])
 
     const handleFollow = (action: boolean) => {
@@ -122,11 +215,131 @@ export default function ViewProfile() {
                 tablinks[i].className += " active"
             }
         }
+
+        if (!user) {
+            return
+        }
+
+        if (elemNum === 1) {
+            // More Mutuals / All Mutuals
+            if (userExists && !viewingOwn) {
+                // populate mutuals following you
+                nextHandleBatch(
+                    `/mutuals-following-you/${user.id}`,
+                    [],
+                    setMutualsFollowingYou,
+                    0,
+                    setHasMoreMutualsFollowingYou
+                )
+                // populate mutuals you follow
+                nextHandleBatch(
+                    `/mutuals-you-follow/${user.id}`,
+                    [],
+                    setMutualsYouFollow,
+                    0,
+                    setHasMoreMutualsYouFollow
+                )
+                // populate unacquainted mutuals
+                nextHandleBatch(
+                    `/unacquainted-mutuals/${user.id}`,
+                    [],
+                    setUnacquaintedMutuals,
+                    0,
+                    setHasMoreUnacquaintedMutuals
+                )
+            } else {
+                // populate all mutuals
+                nextHandleBatch(
+                    `/all-mutuals`,
+                    [],
+                    setAllMutuals,
+                    0,
+                    setHasMoreAllMutuals
+                )
+            }
+        } else if (elemNum === 2) {
+            // Followers
+            if (userExists && !viewingOwn) {
+                // populate common followers
+                nextHandleBatch(
+                    `/common-followers/${user.id}`,
+                    [],
+                    setCommonFollowers,
+                    0,
+                    setHasMoreCommonFollowers
+                )
+                // populate specific followers
+                nextHandleBatch(
+                    `/specific-followers/${user.id}`,
+                    [],
+                    setSpecificFollowers,
+                    0,
+                    setHasMoreSpecificFollowers
+                )
+            } else {
+                // populate all followers
+                nextHandleBatch(
+                    `/all-followers`,
+                    [],
+                    setAllFollowers,
+                    0,
+                    setHasMoreAllFollowers
+                )
+            }
+        } else if (elemNum === 3) {
+            // Following
+            if (userExists && !viewingOwn) {
+                // populate common following
+                nextHandleBatch(
+                    `/common-following/${user.id}`,
+                    [],
+                    setCommonFollowing,
+                    0,
+                    setHasMoreCommonFollowing
+                )
+                // populate specific following
+                nextHandleBatch(
+                    `/specific-following/${user.id}`,
+                    [],
+                    setSpecificFollowing,
+                    0,
+                    setHasMoreSpecificFollowing
+                )
+            } else {
+                // populate all following
+                nextHandleBatch(
+                    `/all-following`,
+                    [],
+                    setAllFollowing,
+                    0,
+                    setHasMoreAllFollowing
+                )
+            }
+        }
     }
 
-    useEffect(() => {
-        document.getElementById("view-profile--defaultopen")?.click()
-    }, [])
+    const nextHandleBatch = (
+        route: string,
+        state: User[],
+        stateSetter: React.Dispatch<React.SetStateAction<User[]>>,
+        batchNum: number,
+        hasMoreSetter: React.Dispatch<React.SetStateAction<boolean>>
+    ) => {
+        doAPICall('GET', `${route}/${batchNum}`, dispatch, navigate, token, (body) => {
+            const usernames: string[] = body.usernames
+            for (const username of usernames) {
+                doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (profileBody) => {
+                    const currentUserList = state
+                    const userToAdd: User = profileBody.user
+                    currentUserList.push(userToAdd)
+                    stateSetter([...currentUserList])
+                })
+            }
+            if (usernames.length < consts.HANDLE_BATCH_SIZE) {
+                hasMoreSetter(false)
+            }
+        })
+    }
 
     const handleBlock = (action: boolean) => {
         if (!user) {
@@ -157,7 +370,7 @@ export default function ViewProfile() {
         return (
             <div className="view-profile">
                 <h1>{user?.username}</h1>
-                <p>This user has you blocked. You are disallowed from viewing their profile, following them, DMing them, or interacting with their posts.</p>
+                <p>This handle's owner has you blocked. You are disallowed from interacting with them and their profile. Your posts are hidden from their feed, and likewise.</p>
                 <div>
                     {isBlocking &&
                         <div className="interactive--elem" title="Unblock handle" onClick={() => handleBlock(false)}>
@@ -246,7 +459,26 @@ export default function ViewProfile() {
                 <>
                     <div>
                         <h2>Shared Mutuals</h2>
-                        <div />
+                        <ScrollableHandles
+                            users={sharedMutuals}
+                            navigateWrapperFunction={(destUsername: string) => {
+                                navigate(`/u/${destUsername}`)
+                            }}
+                            hasMore={hasMoreSharedMutuals}
+                            loadMoreCallback={() => {
+                                if (!user) {
+                                    return
+                                }
+                                setSharedMutualsBatchNum(sharedMutualsBatchNum + 1)
+                                nextHandleBatch(
+                                    `/shared-mutuals/${user.id}`,
+                                    sharedMutuals,
+                                    setSharedMutuals,
+                                    sharedMutualsBatchNum + 1,
+                                    setHasMoreSharedMutuals
+                                )
+                            }}
+                        />
                     </div>
                     <hr />
                 </>
@@ -265,7 +497,7 @@ export default function ViewProfile() {
                             <button
                                 className="linkButton view-profile--tabbutton"
                                 onClick={() => { openTab(1) }}
-                                title="Mutuals not shared with this user"
+                                title="Mutuals not shared with this handle"
                             >More Mutuals</button>
                         }
                         {(!userExists || viewingOwn) &&
@@ -298,17 +530,93 @@ export default function ViewProfile() {
                     {!viewingOwn && userExists &&
                         <>
                             <h3>Follows you</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={mutualsFollowingYou}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreMutualsFollowingYou}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setMutualsFollowingYouBatchNum(mutualsFollowingYouBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/mutuals-following-you/${user.id}`,
+                                        mutualsFollowingYou,
+                                        setMutualsFollowingYou,
+                                        mutualsFollowingYouBatchNum + 1,
+                                        setHasMoreMutualsFollowingYou
+                                    )
+                                }}
+                            />
                             <hr />
                             <h3>You follow</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={mutualsYouFollow}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreMutualsYouFollow}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setMutualsYouFollowBatchNum(mutualsYouFollowBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/mutuals-you-follow/${user.id}`,
+                                        mutualsYouFollow,
+                                        setMutualsYouFollow,
+                                        mutualsYouFollowBatchNum + 1,
+                                        setHasMoreMutualsYouFollow
+                                    )
+                                }}
+                            />
                             <hr />
                             <h3>More handles</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={unacquaintedMutuals}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreUnacquaintedMutuals}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setUnacquaintedMutualsBatchNum(unacquaintedMutualsBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/unacquainted-mutuals/${user.id}`,
+                                        unacquaintedMutuals,
+                                        setUnacquaintedMutuals,
+                                        unacquaintedMutualsBatchNum + 1,
+                                        setHasMoreUnacquaintedMutuals
+                                    )
+                                }}
+                            />
                         </>
                     }
                     {(viewingOwn || !userExists) &&
-                        <div />
+                        <ScrollableHandles
+                            users={allMutuals}
+                            navigateWrapperFunction={(destUsername: string) => {
+                                navigate(`/u/${destUsername}`)
+                            }}
+                            hasMore={hasMoreAllMutuals}
+                            loadMoreCallback={() => {
+                                if (!user) {
+                                    return
+                                }
+                                setAllMutualsBatchNum(allMutualsBatchNum + 1)
+                                nextHandleBatch(
+                                    `/all-mutuals`,
+                                    allMutuals,
+                                    setAllMutuals,
+                                    allMutualsBatchNum + 1,
+                                    setHasMoreAllMutuals
+                                )
+                            }}
+                        />
                     }
                 </div>
                 <div
@@ -318,14 +626,71 @@ export default function ViewProfile() {
                     {!viewingOwn && userExists &&
                         <>
                             <h3>Also follows you</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={commonFollowers}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreCommonFollowers}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setCommonFollowersBatchNum(commonFollowersBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/common-followers/${user.id}`,
+                                        commonFollowers,
+                                        setCommonFollowers,
+                                        commonFollowersBatchNum + 1,
+                                        setHasMoreCommonFollowers
+                                    )
+                                }}
+                            />
                             <hr />
                             <h3>More followers</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={specificFollowers}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreSpecificFollowers}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setSpecificFollowersBatchNum(specificFollowersBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/specific-followers/${user.id}`,
+                                        specificFollowers,
+                                        setSpecificFollowers,
+                                        specificFollowersBatchNum + 1,
+                                        setHasMoreSpecificFollowers
+                                    )
+                                }}
+                            />
                         </>
                     }
                     {(viewingOwn || !userExists) &&
-                        <div />
+                        <ScrollableHandles
+                            users={allFollowers}
+                            navigateWrapperFunction={(destUsername: string) => {
+                                navigate(`/u/${destUsername}`)
+                            }}
+                            hasMore={hasMoreAllFollowers}
+                            loadMoreCallback={() => {
+                                if (!user) {
+                                    return
+                                }
+                                setAllFollowersBatchNum(allFollowersBatchNum + 1)
+                                nextHandleBatch(
+                                    `/all-followers`,
+                                    allFollowers,
+                                    setAllFollowers,
+                                    allFollowersBatchNum + 1,
+                                    setHasMoreAllFollowers
+                                )
+                            }}
+                        />
                     }
                 </div>
                 <div
@@ -335,14 +700,71 @@ export default function ViewProfile() {
                     {!viewingOwn && userExists &&
                         <>
                             <h3>You also follow</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={commonFollowing}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreCommonFollowing}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setCommonFollowingBatchNum(commonFollowingBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/common-following/${user.id}`,
+                                        commonFollowing,
+                                        setCommonFollowing,
+                                        commonFollowingBatchNum + 1,
+                                        setHasMoreCommonFollowing
+                                    )
+                                }}
+                            />
                             <hr />
                             <h3>More handles</h3>
-                            <div />
+                            <ScrollableHandles
+                                users={specificFollowing}
+                                navigateWrapperFunction={(destUsername: string) => {
+                                    navigate(`/u/${destUsername}`)
+                                }}
+                                hasMore={hasMoreSpecificFollowing}
+                                loadMoreCallback={() => {
+                                    if (!user) {
+                                        return
+                                    }
+                                    setSpecificFollowingBatchNum(specificFollowingBatchNum + 1)
+                                    nextHandleBatch(
+                                        `/specific-following/${user.id}`,
+                                        specificFollowing,
+                                        setSpecificFollowing,
+                                        specificFollowingBatchNum + 1,
+                                        setHasMoreSpecificFollowing
+                                    )
+                                }}
+                            />
                         </>
                     }
                     {(viewingOwn || !userExists) &&
-                        <div />
+                        <ScrollableHandles
+                        users={allFollowing}
+                        navigateWrapperFunction={(destUsername: string) => {
+                            navigate(`/u/${destUsername}`)
+                        }}
+                        hasMore={hasMoreAllFollowing}
+                        loadMoreCallback={() => {
+                            if (!user) {
+                                return
+                            }
+                            setAllFollowingBatchNum(allFollowingBatchNum + 1)
+                            nextHandleBatch(
+                                `/all-following`,
+                                allFollowing,
+                                setAllFollowing,
+                                allFollowingBatchNum + 1,
+                                setHasMoreAllFollowing
+                            )
+                        }}
+                    />
                     }
                 </div>
             </div>

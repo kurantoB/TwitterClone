@@ -52,11 +52,11 @@ const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 )
 root.render(
-  <React.StrictMode>
-    <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID ? process.env.REACT_APP_CLIENT_ID : ""}>
-      <Provider store={store}>
-        <RouterProvider router={router} />
-      </Provider>
-    </GoogleOAuthProvider>
-  </React.StrictMode>
+  // <React.StrictMode>
+  <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID ? process.env.REACT_APP_CLIENT_ID : ""}>
+    <Provider store={store}>
+      <RouterProvider router={router} />
+    </Provider>
+  </GoogleOAuthProvider>
+  // </React.StrictMode>
 );
