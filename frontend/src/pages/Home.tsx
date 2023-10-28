@@ -44,7 +44,7 @@ export default function Home() {
                     <h1>Welcome to Aloft.io</h1>
                 </div>
                 <div>
-                    <h2>an "indie Twitter"</h2>
+                    <h2><em>Twitter, the indie version</em></h2>
                 </div>
             </section>
             <section>
