@@ -3,6 +3,8 @@ import { User } from "./entity/User"
 import { NotificationType } from "./entity/Notification"
 import { FeedActivityType } from "./entity/FeedActivity"
 import consts from "./consts"
+import { VisibilityType } from './entity/Post'
+import { DM } from './entity/DM'
 
 export async function testDB2() {
 }
@@ -44,7 +46,7 @@ export default async function testDB() {
     }
 
     // deleteUser
-    await Persistence.deleteUser(me.id)
+    await Persistence.deleteUser(me.googleid)
     conditionalLog("deleted user " + kurantoBID)
     const deleteUserGetResult = await Persistence.getUserByGoogleID(kurantoBID)
     conditionalLog("try get kurantoB: " + JSON.stringify(deleteUserGetResult))
@@ -89,7 +91,7 @@ export default async function testDB() {
     kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
 
-    const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.")
+    const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.", VisibilityType.EVERYONE)
     conditionalLog("Inserted new post: " + JSON.stringify(newPost))
     const newPostFeedActivity = await Persistence.postOrReplyHook(newPost)
     conditionalLog("Inserted new post feed activity: " + JSON.stringify(newPostFeedActivity))
@@ -140,7 +142,8 @@ export default async function testDB() {
     const newReply = await Persistence.postOrReply(
         kurantoNoMichi,
         "This is a very long reply that should exceed the number of characters alloted to the preview. I think it's supposed to be 420, which is symbolic because Twitter started off with 140, then got extended to 280. It's only natural that we go to 420 from here. 420, you say. I know what you're thinking, but hold that thought. Wow, the 420 char limit is longer than I thought. How am I still not done? Well, in any case, I'm hopeful you peeps will make good use of all this space.",
-        newPost)
+        VisibilityType.EVERYONE,
+        [newPost.id])
     conditionalLog("Inserted new reply: " + JSON.stringify(newReply))
     const newReplyFeedActivity = await Persistence.postOrReplyHook(newReply, newPost)
     conditionalLog("Inserted new reply feed activity: " + JSON.stringify(newReplyFeedActivity))
@@ -176,40 +179,49 @@ export default async function testDB() {
     kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog("inserted receiver user: " + JSON.stringify(kurantoNoMichi))
 
+    const formatDMs = (dms: DM[]) => dms.map((dm) => {
+        return {
+            sender: dm.sender?.username,
+            recipient: dm.recipient?.username,
+            message: dm.message,
+            ordering: dm.ordering
+        }
+    })
+
     const dm = await Persistence.sendDM(me, kurantoNoMichi, "Howdy")
     conditionalLog("user1 sent DM: " + JSON.stringify(dm))
     let dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm2 = await Persistence.sendDM(kurantoNoMichi, me, "Yo")
     conditionalLog("user2 sent DM: " + JSON.stringify(dm2))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm3 = await Persistence.sendDM(me, kurantoNoMichi, "Howdy howdy")
     conditionalLog("user1 sent DM: " + JSON.stringify(dm3))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm4 = await Persistence.sendDM(kurantoNoMichi, me, "What is it?")
     conditionalLog("user2 sent DM: " + JSON.stringify(dm4))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm5 = await Persistence.sendDM(kurantoNoMichi, me, "Speak up")
     conditionalLog("user2 sent DM: " + JSON.stringify(dm5))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm6 = await Persistence.sendDM(me, kurantoNoMichi, "Nothing")
     conditionalLog("user1 sent DM: " + JSON.stringify(dm6))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const dm7 = await Persistence.sendDM(me, kurantoNoMichi, "Bye")
     conditionalLog("user1 sent DM: " + JSON.stringify(dm7))
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     await Persistence.deleteDM(dm)
     await Persistence.deleteDM(dm3)
@@ -217,19 +229,19 @@ export default async function testDB() {
     await Persistence.deleteDM(dm7)
     conditionalLog("User 1 deleted all DMs.")
     dmBank = await Persistence.getOneOnOneDMs(me.id, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const savedDmSenderID = me.id
-    await Persistence.deleteUser(me.id)
+    await Persistence.deleteUser(me.googleid)
     conditionalLog("Deleted user1")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, kurantoNoMichi.id)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     const savedDmRecipientID = kurantoNoMichi.id
-    await Persistence.deleteUser(kurantoNoMichi.id)
+    await Persistence.deleteUser(kurantoNoMichi.googleid)
     conditionalLog("Deleted user2")
     dmBank = await Persistence.getOneOnOneDMs(savedDmSenderID, savedDmRecipientID)
-    conditionalLog("DM bank: " + JSON.stringify(dmBank))
+    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
     consts.NUMBER_OF_RETRIEVABLE_DM_S = saved_number_of_retrievable_dm_s
 

@@ -37,6 +37,19 @@ export class User {
     )
     following: User[]
 
+    @ManyToMany(
+        () => User,
+        (user) => user.befriendedBy
+    )
+    @JoinTable()
+    friends: User[]
+
+    @ManyToMany(
+        () => User,
+        (user) => user.friends
+    )
+    befriendedBy: User[]
+
     @Column({
         type: "int",
         default: 0

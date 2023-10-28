@@ -30,8 +30,8 @@ configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB2()
-    // await testDB()
-    startServer()
+    await testDB()
+    // startServer()
 })
 
 // Middleware to verify JWT tokens
@@ -405,7 +405,7 @@ function handleCreateOrUpdateAccount(
         }
         const formErrors: string[] = []
         if (!userId) {
-            if (fields.username[0].length == 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
+            if (fields.username[0].length === 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
                 formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
             } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
                 formErrors.push("Only letters, numbers, and underscores are permitted in the handle.")

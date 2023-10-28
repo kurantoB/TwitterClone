@@ -3,9 +3,11 @@ import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
 import { Notification, NotificationType } from "./entity/Notification";
-import { Post } from "./entity/Post";
+import { Post, VisibilityType } from "./entity/Post";
 import { User } from "./entity/User";
 import { AppDataSource } from "./data-source";
+import { PostReport } from "./entity/PostReport";
+import { ActionTaken } from "./entity/ActionTaken";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -125,7 +127,8 @@ export async function getUserAvatar(googleid: string) {
 export async function postOrReply(
     user: User,
     message: string,
-    parentPost: Post = null
+    visibility: VisibilityType,
+    parentPostIds: string[] = null
 ) {
     const userPostCount = await AppDataSource.getRepository(Post).count({
         where: { author: { id: user.id } }
@@ -145,8 +148,9 @@ export async function postOrReply(
     } else {
         newPost.body = message
     }
-    if (parentPost) {
-        newPost.parentPost = parentPost
+    newPost.visibility = visibility
+    if (parentPostIds) {
+        newPost.parentPostIds = parentPostIds.reduce((previousValue, currentValue) => `${previousValue}/${currentValue}`)
     }
     return await AppDataSource.getRepository(Post).save(newPost)
 }
@@ -177,16 +181,39 @@ export async function postOrReplyHook(
 
 // make sure the media is cleared from storage first
 export async function deletePost(post: Post) {
-    const replies = await AppDataSource
-        .getRepository(Post)
-        .createQueryBuilder("post")
-        .where("post.parentPost = :post_id", { post_id: post.id })
-        .getMany()
-    replies.forEach((reply) => {
-        reply.isParentPostDeleted = true
-    })
-    await AppDataSource.getRepository(Post).save(replies)
     return await AppDataSource.getRepository(Post).remove(post)
+}
+
+
+
+// reports
+
+export async function reportPost(
+    post: Post,
+    reporter: User
+) {
+    const report = new PostReport()
+    report.postId = post.id
+    report.reporter = reporter
+    const date = new Date()
+    date.setDate(date.getDate() + consts.REPORT_EXPIRY_DAYS)
+    report.expiryDate = date
+    await AppDataSource.getRepository(PostReport).save(report)
+}
+
+export async function takeActionOnReport(report: PostReport) {
+    const actionTaken = new ActionTaken()
+    actionTaken.targetUser = report.reportee
+    const date = new Date()
+    date.setDate(date.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
+    actionTaken.expiryDate = date
+    await AppDataSource.getRepository(ActionTaken).save(actionTaken)
+}
+
+export async function takeActionOnReportHook(report: PostReport) {
+    // null if post has been deleted
+    const sourcePost = await AppDataSource.getRepository(Post).findOneBy({ id: report.postId })
+    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, sourcePost,  null)
 }
 
 
@@ -331,49 +358,21 @@ export async function followHook(sourceUserGoogleId: string, targetUserId: strin
 
 async function handleFollow(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     await doTransaction(async (em) => {
-        const loadedSourceUser = await em.findOne(User, {
-            relations: {
-                following: true,
-                followers: true,
-                blockedUsers: true
-            },
-            where: { googleid: sourceUserGoogleId }
-        })
-        if (!loadedSourceUser) {
-            throw new Error("Unable to retrieve user using token.")
-        }
-        let loadedTargetUser = await em.findOne(User, {
-            relations: {
-                blockedUsers: true
-            },
-            where: { id: targetUserId }
-        })
-        if (!loadedTargetUser) {
-            throw new Error("Unable to retrieve user by ID.")
-        }
-        if (action && loadedTargetUser.blockedUsers.some((user) => user.googleid === sourceUserGoogleId)) {
-            throw new Error("Unable to follow - source user is blocked.")
-        }
-        if (action && loadedSourceUser.blockedUsers.some((user) => user.id === targetUserId)) {
-            throw new Error("Unable to follow - target user is blocked.")
-        }
+        let [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
 
         let mutualDelta = 0
         if (action) {
-            if (
-                loadedSourceUser.following.length == 0
-                || loadedSourceUser.following.filter((user) => user.id === targetUserId).length === 0
-            ) {
+            if (!loadedSourceUser.following.some((user) => user.id === targetUserId)) {
                 loadedSourceUser.following.push(loadedTargetUser)
-                if (loadedSourceUser.followers.filter((user) => user.id === targetUserId).length === 1) {
+                if (loadedSourceUser.followers.some((user) => user.id === targetUserId)) {
                     mutualDelta = 1
                 }
             }
         } else {
             const initialFollowingLength = loadedSourceUser.following.length
             loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUserId)
-            if (loadedSourceUser.following.length != initialFollowingLength) {
-                if (loadedSourceUser.followers.filter((user) => user.id === targetUserId).length === 1) {
+            if (loadedSourceUser.following.length !== initialFollowingLength) {
+                if (loadedSourceUser.followers.some((user) => user.id === targetUserId)) {
                     mutualDelta = -1
                 }
             }
@@ -433,6 +432,67 @@ export async function getFollowRelationship(googleid: string, targetUserId: stri
 }
 
 
+
+// friending
+
+export async function friend(userGoogleId: string, targetUserId: string) {
+    return await handleFriend(userGoogleId, targetUserId, true)
+}
+
+export async function unfriend(userGoogleId: string, targetUserId: string) {
+    return await handleFriend(userGoogleId, targetUserId, false)
+}
+
+export async function friendHook(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
+    return await makeNotification(
+        await AppDataSource.getRepository(User).findOneBy({ id: targetUserId }),
+        NotificationType.FRIENDING,
+        null,
+        await AppDataSource.getRepository(User).findOneBy({ googleid: sourceUserGoogleId }),
+        action
+    )
+}
+
+export async function getFriends(googleid: string) {
+    const loadedUser = await AppDataSource.getRepository(User).findOne({
+        relations: { friends: true },
+        where: { googleid }
+    })
+    return loadedUser.friends.sort((a, b) => {
+        return a.username.localeCompare(b.username)
+    }).map((user) => user.username)
+}
+
+export async function getBefriendedBy(googleid: string) {
+    const loadedUser = await AppDataSource.getRepository(User).findOne({
+        relations: { befriendedBy: true },
+        where: { googleid }
+    })
+    return loadedUser.befriendedBy.sort((a, b) => {
+        return a.username.localeCompare(b.username)
+    }).map((user) => user.username)
+}
+
+async function handleFriend(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
+    await doTransaction(async (em) => {
+        let [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
+        if (action) {
+            if (
+                loadedSourceUser.followers.some((user) => user.id === targetUserId)
+                && loadedSourceUser.following.some((user) => user.id === targetUserId)
+            ) {
+                if (!loadedSourceUser.friends.some((user) => user.id === targetUserId)) {
+                    loadedSourceUser.friends.push(loadedTargetUser)
+                }
+            } else {
+                throw new Error("Failed to add this user as your friend - this can only be done to mutuals.")
+            }
+        } else {
+            loadedSourceUser.friends = loadedSourceUser.friends.filter((user) => user.id !== targetUserId)
+        }
+        await em.save(User, loadedSourceUser)
+    })
+}
 
 // blocks
 
@@ -605,6 +665,7 @@ export async function getOneOnOneDMs(user1ID: string, user2ID: string) {
         .getRepository(DM)
         .createQueryBuilder("dm")
         .leftJoinAndSelect("dm.sender", "sender")
+        .leftJoinAndSelect("dm.recipient", "recipient")
         .where("dm.id like :queryID", { queryID: `%${user1ID}%` })
         .andWhere("dm.id like :queryID", { queryID: `%${user2ID}%` })
         .getMany()
@@ -619,6 +680,10 @@ export async function deleteDM(dm: DM) {
         }
     )
 }
+
+
+
+// Utility
 
 
 
@@ -670,8 +735,6 @@ async function makeFeedActivity(
     }
 }
 
-
-
 export async function doTransaction(transactionCall: (
     entityManager: EntityManager) => Promise<void>
 ) {
@@ -681,6 +744,39 @@ export async function doTransaction(transactionCall: (
             await transactionCall(transactionEntityManager)
         }
     )
+}
+
+// check if following and friending is valid
+async function checkRelation(sourceUserGoogleId: string, targetUserId: string, action: boolean, em: EntityManager) {
+    const loadedSourceUser = await em.findOne(User, {
+        relations: {
+            following: true,
+            followers: true,
+            friends: true,
+            blockedUsers: true
+        },
+        where: { googleid: sourceUserGoogleId }
+    })
+    if (!loadedSourceUser) {
+        throw new Error("Unable to retrieve user using token.")
+    }
+    let loadedTargetUser = await em.findOne(User, {
+        relations: {
+            blockedUsers: true
+        },
+        where: { id: targetUserId }
+    })
+    if (!loadedTargetUser) {
+        throw new Error("Unable to retrieve user by ID.")
+    }
+    if (action && loadedTargetUser.blockedUsers.some((user) => user.googleid === sourceUserGoogleId)) {
+        throw new Error("Unable to follow - source user is blocked.")
+    }
+    if (action && loadedSourceUser.blockedUsers.some((user) => user.id === targetUserId)) {
+        throw new Error("Unable to follow - target user is blocked.")
+    }
+
+    return [loadedSourceUser, loadedTargetUser]
 }
 
 
@@ -712,6 +808,11 @@ export async function getNotification(
     sourceUser: User
 ) {
     return await AppDataSource.getRepository(Notification).findOne({
+        relations: {
+            user: true,
+            sourcePost: true,
+            sourceUser: true
+        },
         where: {
             user: { id: user.id },
             type,

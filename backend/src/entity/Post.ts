@@ -1,6 +1,12 @@
-import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm"
+import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn } from "typeorm"
 import { User } from "./User"
 import consts from "../consts"
+
+export enum VisibilityType {
+    FRIENDS,
+    MUTUALS,
+    EVERYONE
+}
 
 @Entity()
 export class Post {
@@ -36,27 +42,10 @@ export class Post {
     @JoinTable()
     reposters: User[]
 
-    @OneToMany(
-        () => Post,
-        (post) => post.parentPost
-    )
-    replies: Post[]
-
-    @ManyToOne(
-        () => Post,
-        (post) => post.replies,
-        {
-            onDelete: "SET NULL",
-            nullable: true
-        }
-    )
-    @Index()
-    parentPost: Post
-
     @Column({
-        default: false
+        nullable: true
     })
-    isParentPostDeleted: boolean
+    parentPostIds: string
 
     @Column({
         nullable: true
@@ -64,9 +53,10 @@ export class Post {
     media: string
 
     @Column({
-        nullable: true
+        type: "enum",
+        enum: VisibilityType
     })
-    compressedMedia: string
+    visibility: VisibilityType
 
     @CreateDateColumn({ type: "timestamptz" })
     createTime: Date
