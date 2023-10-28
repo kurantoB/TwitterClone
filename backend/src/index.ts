@@ -17,11 +17,14 @@ import cors from 'cors'
 import { getUserHasAvatar } from "./api/generalAPI"
 import testDB, { clearDB, testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
+import { ImageAnnotatorClient } from "@google-cloud/vision"
 
 /*
 Responses will be in the format { body }
 Requests that fail will be in the format { error }
  */
+
+export const SAFE_SEARCH_CLIENT = new ImageAnnotatorClient({ keyFilename: "twitterclone-399423-d7e866f866ec.json" })
 
 configDotenv()
 
@@ -443,7 +446,7 @@ function handleCreateOrUpdateAccount(
                 callback
             )
         } catch (error) {
-            if (error.message && error.message.indexOf("username/") !== -1) {
+            if (error.message && error.message.indexOf("/") !== -1) {
                 callback({ formErrors: [error.message] })
             } else {
                 throw error

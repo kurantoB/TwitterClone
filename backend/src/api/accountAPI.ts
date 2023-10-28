@@ -2,6 +2,8 @@ import * as Persistence from "../persistence"
 import { Storage } from "@google-cloud/storage"
 import consts from "../consts"
 import { getUserIdFromToken } from "../userGetter"
+import { SAFE_SEARCH_CLIENT } from "../index"
+import { safeSearchImage } from "./generalAPI"
 
 export async function getUserByUsername(username: string) {
     return await Persistence.getUserByUsername(username)
@@ -17,6 +19,12 @@ export async function createOrUpdateAccount(
     isDeleteAvatar: boolean,
     callback: (responseVal: any) => void
 ) {
+
+    // perform safe search detection on the avatar
+    if (!await safeSearchImage(avatarUploadFilename)) {
+        throw new Error(`avatar/Uploaded file has been found to likely contain objectionable content. See: terms of service.`)
+    }
+
     await Persistence.createOrUpdateAccountHelper(userId, googleid, username, bio, shortBio)
     // send the response back to the client before doing cloud storage operations
     callback("OK")
