@@ -1,4 +1,4 @@
-import { EntityManager, IsNull, SelectQueryBuilder } from "typeorm";
+import { EntityManager, IsNull, MoreThan } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -202,18 +202,29 @@ export async function reportPost(
 }
 
 export async function takeActionOnReport(report: PostReport) {
+    // delete account if tolerance level is exceeded
+    const currentTimeInMilliseconds = new Date().getTime()
+    const newTimeInMilliseconds = currentTimeInMilliseconds - (86400000 * consts.ACCOUNT_TOLERANCE_DURATION_DAYS)
+    const newDate = new Date(newTimeInMilliseconds)
+    const actionsTaken = await AppDataSource.getRepository(ActionTaken).countBy({
+        targetUser: report.reportee,
+        actionTime: MoreThan(newDate)
+    })
+    if (actionsTaken >= consts.ACCOUNT_TOLERANCE_QUANTITY) {
+        await deleteUser(report.reportee.googleid)
+        return
+    }
+
     const actionTaken = new ActionTaken()
     actionTaken.targetUser = report.reportee
-    const date = new Date()
-    date.setDate(date.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
-    actionTaken.expiryDate = date
+    const expiryDate = new Date()
+    expiryDate.setDate(expiryDate.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
+    actionTaken.expiryDate = expiryDate
     await AppDataSource.getRepository(ActionTaken).save(actionTaken)
 }
 
 export async function takeActionOnReportHook(report: PostReport) {
-    // null if post has been deleted
-    const sourcePost = await AppDataSource.getRepository(Post).findOneBy({ id: report.postId })
-    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, sourcePost,  null)
+    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, null,  null)
 }
 
 
@@ -680,7 +691,7 @@ export async function deleteDM(dm: DM) {
         { id: dm.id },
         {
             isDeleted: true,
-            message: consts.DELETED_DM_PLACEHOLDER
+            message: "[Deleted message]"
         }
     )
 }
