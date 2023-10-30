@@ -13,6 +13,7 @@ import RouteError from './pages/RouteError';
 import WentWrong from './components/WentWrong';
 import ViewBlockedHandles from './pages/ViewBlockedHandles';
 import { useAppSelector } from './app/hooks';
+import ViewFriends from './pages/ViewFriends';
 
 const router = createBrowserRouter([
   {
@@ -30,6 +31,10 @@ const router = createBrowserRouter([
       {
         path: "/u/:username",
         element: <ViewProfile />,
+      },
+      {
+        path: "/friends",
+        element: <ViewFriends />
       },
       {
         path: "/blocked",

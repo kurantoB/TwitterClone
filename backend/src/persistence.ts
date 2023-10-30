@@ -343,7 +343,8 @@ export async function follow(userGoogleId: string, targetUserId: string) {
 }
 
 export async function unfollow(userGoogleId: string, targetUserId: string) {
-    return await handleFollow(userGoogleId, targetUserId, false)
+    await handleFollow(userGoogleId, targetUserId, false)
+
 }
 
 export async function followHook(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
@@ -376,6 +377,9 @@ async function handleFollow(sourceUserGoogleId: string, targetUserId: string, ac
                     mutualDelta = -1
                 }
             }
+
+            // remove friend
+            loadedSourceUser.friends = loadedSourceUser.friends.filter((user) => user.id !== targetUserId)
         }
         loadedSourceUser.followingCount = loadedSourceUser.following.length
         loadedSourceUser.mutualCount += mutualDelta
@@ -412,23 +416,23 @@ export async function getFollowing(user: User) {
 }
 
 export async function getFollowRelationship(googleid: string, targetUserId: string) {
-    let following = false
-    let followedBy = false
     const sourceUser = await AppDataSource.getRepository(User).findOne({
         where: { googleid },
         relations: {
             followers: true,
-            following: true
+            following: true,
+            friends: true
         }
     })
     if (!sourceUser) {
         throw new Error("User not found.")
     }
 
-    following = sourceUser.following.some((user) => user.id === targetUserId)
-    followedBy = sourceUser.followers.some((user) => user.id === targetUserId)
+    const following = sourceUser.following.some((user) => user.id === targetUserId)
+    const followedBy = sourceUser.followers.some((user) => user.id === targetUserId)
+    const friend = sourceUser.friends.some((user) => user.id === targetUserId)
 
-    return { following, followedBy }
+    return { following, followedBy, friend }
 }
 
 

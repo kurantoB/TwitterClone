@@ -25,11 +25,11 @@ export default function doAPICall(
     effectDependencyName: string = "",
     effectDependency: any = null
 ) {
-    if (effectDependencyName === "") {
-        // dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
-    } else {
-        // dispatch(addErrorMessage(`Making API call: ${method} ${route} per change in ${effectDependencyName}: ${JSON.stringify(effectDependency)}`))
-    }
+    // if (effectDependencyName === "") {
+    //     dispatch(addErrorMessage(`Making API call: ${method} ${route}`))
+    // } else {
+    //     dispatch(addErrorMessage(`Making API call: ${method} ${route} per change in ${effectDependencyName}: ${JSON.stringify(effectDependency)}`))
+    // }
     const axiosInstance = axios.create({
         baseURL: process.env.REACT_APP_BASE_URL
     })

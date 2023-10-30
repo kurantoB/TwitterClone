@@ -39,6 +39,10 @@ export default function Header() {
         navigate("/edit-profile")
     }
 
+    const navigateToFriendList = () => {
+        navigate("/friends")
+    }
+
     const navigateToBlockList = () => {
         navigate("/blocked")
     }
@@ -59,7 +63,8 @@ export default function Header() {
                 </div>
                 {headerMode === HeaderMode.CAN_EDIT_PROFILE &&
                     <>
-                        <button className="linkButton" onClick={navigateToEditProfile}>Edit Profile</button>
+                        <button className="linkButton" onClick={navigateToEditProfile}>Edit profile</button>
+                        <button className="linkButton" onClick={navigateToFriendList}>Your friends</button>
                         <button className="linkButton" onClick={navigateToBlockList}>Blocked handles</button>
                     </>
                 }

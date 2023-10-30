@@ -33,6 +33,7 @@ export default function ViewProfile() {
     const [viewingOwn, setViewingOwn] = useState<boolean>(false)
     const [following, setFollowing] = useState<boolean>(false)
     const [followedBy, setFollowedBy] = useState<boolean>(false)
+    const [friend, setFriend] = useState<boolean>(false)
     const [isBlocking, setIsBlocking] = useState<boolean>(false)
     const [isBlockedBy, setIsBlockedBy] = useState<boolean>(false)
     const [tabContentStyles, setTabContentStyles] = useState<React.CSSProperties[]>([
@@ -95,7 +96,9 @@ export default function ViewProfile() {
                 doAPICall('GET', `/get-following-relationship/${user!.id}`, dispatch, navigate, token, (body) => {
                     setFollowing(body.following)
                     setFollowedBy(body.followedBy)
+                    setFriend(body.friend)
                 }, null, undefined, "userExists, username", [userExists, username])
+
                 doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (body) => {
                     setIsBlocking(body.isBlocking)
                 }, null, undefined, "userExists, username", [userExists, username])
@@ -106,6 +109,7 @@ export default function ViewProfile() {
     useEffect(() => {
         setFollowing(false)
         setFollowedBy(false)
+        setFriend(false)
         setIsBlocking(false)
         setIsBlockedBy(false)
 
@@ -193,6 +197,18 @@ export default function ViewProfile() {
                 followerCount: action ? user.followerCount + 1 : user.followerCount - 1,
                 mutualCount: action ? (followedBy ? user.mutualCount + 1 : user.mutualCount) : (followedBy ? user.mutualCount - 1 : user.mutualCount)
             })
+            if (!action) {
+                setFriend(false)
+            }
+        })
+    }
+
+    const handleFriend = (action: boolean) => {
+        if (!user) {
+            return
+        }
+        doAPICall('PATCH', `/${action ? "friend" : "unfriend"}/${user.id}`, dispatch, navigate, token, (_) => {
+            setFriend(action)
         })
     }
 
@@ -325,7 +341,7 @@ export default function ViewProfile() {
         batchNum: number,
         hasMoreSetter: React.Dispatch<React.SetStateAction<boolean>>
     ) => {
-        doAPICall('GET', `${route}/${batchNum}`, dispatch, navigate, token, (body) => {
+        doAPICall('GET', `${route}/${batchNum}${route.startsWith('/all-') ? '/' + username : ''}`, dispatch, navigate, token, (body) => {
             const usernames: string[] = body.usernames
             for (const username of usernames) {
                 if (state.some((user) => user.username === username)) {
@@ -415,12 +431,20 @@ export default function ViewProfile() {
             {userExists && !viewingOwn && !isBlocking &&
                 <>
                     <div>
-                        {following && followedBy && <h3 className="view-profile--sticker">Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
+                        {following && followedBy && <h3 className="view-profile--sticker">
+                            Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                            {following && followedBy && friend && <>&nbsp;Friend&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></>}
+                        </h3>}
                         {!following && followedBy && <h3 className="view-profile--sticker">Follows you&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
                     </div>
                     <div>
-                        {!following && <button className="largeButton" onClick={() => handleFollow(true)}>{followedBy ? "Follow Back" : "Follow"}</button>}
-                        {!viewingOwn && following && <button className="largeButton" onClick={() => handleFollow(false)}>Unfollow</button>}
+                        <span>
+                            {!following && <button className="largeButton" onClick={() => handleFollow(true)}>{followedBy ? "Follow Back" : "Follow"}</button>}
+                            {!viewingOwn && following && <button className="largeButton" onClick={() => handleFollow(false)}>Unfollow</button>}
+                            &nbsp;&nbsp;
+                            {following && followedBy && !friend && <button className="largeButton" onClick={() => handleFriend(true)}>Make friend</button>}
+                            {following && followedBy && friend && <button className="largeButton" onClick={() => handleFriend(false)}>Drop friend</button>}
+                        </span>
                     </div>
                 </>
 
@@ -510,7 +534,7 @@ export default function ViewProfile() {
                                 className="linkButton view-profile--tabbutton"
                                 onClick={() => { openTab(1) }}
                                 title="Mutuals not shared with this handle"
-                            >More Mutuals</button>
+                            >More mutuals</button>
                         }
                         {(!userExists || viewingOwn) &&
                             <button
@@ -758,25 +782,25 @@ export default function ViewProfile() {
                     }
                     {(viewingOwn || !userExists) &&
                         <ScrollableHandles
-                        users={allFollowing}
-                        navigateWrapperFunction={(destUsername: string) => {
-                            navigate(`/u/${destUsername}`)
-                        }}
-                        hasMore={hasMoreAllFollowing}
-                        loadMoreCallback={() => {
-                            if (!user) {
-                                return
-                            }
-                            setAllFollowingBatchNum(allFollowingBatchNum + 1)
-                            nextHandleBatch(
-                                `/all-following`,
-                                allFollowing,
-                                setAllFollowing,
-                                allFollowingBatchNum + 1,
-                                setHasMoreAllFollowing
-                            )
-                        }}
-                    />
+                            users={allFollowing}
+                            navigateWrapperFunction={(destUsername: string) => {
+                                navigate(`/u/${destUsername}`)
+                            }}
+                            hasMore={hasMoreAllFollowing}
+                            loadMoreCallback={() => {
+                                if (!user) {
+                                    return
+                                }
+                                setAllFollowingBatchNum(allFollowingBatchNum + 1)
+                                nextHandleBatch(
+                                    `/all-following`,
+                                    allFollowing,
+                                    setAllFollowing,
+                                    allFollowingBatchNum + 1,
+                                    setHasMoreAllFollowing
+                                )
+                            }}
+                        />
                     }
                 </div>
             </div>
