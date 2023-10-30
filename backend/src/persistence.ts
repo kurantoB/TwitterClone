@@ -358,7 +358,7 @@ export async function followHook(sourceUserGoogleId: string, targetUserId: strin
 
 async function handleFollow(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     await doTransaction(async (em) => {
-        let [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
+        const [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
 
         let mutualDelta = 0
         if (action) {
@@ -380,16 +380,16 @@ async function handleFollow(sourceUserGoogleId: string, targetUserId: string, ac
         loadedSourceUser.followingCount = loadedSourceUser.following.length
         loadedSourceUser.mutualCount += mutualDelta
         await em.save(User, loadedSourceUser)
-        loadedTargetUser = await em.findOne(User, {
+        const loadedAgainTargetUser = await em.findOne(User, {
             relations: {
                 followers: true
             },
             where: { id: targetUserId }
         })
 
-        loadedTargetUser.followerCount = loadedTargetUser.followers.length
-        loadedTargetUser.mutualCount += mutualDelta
-        await em.save(User, loadedTargetUser)
+        loadedAgainTargetUser.followerCount = loadedAgainTargetUser.followers.length
+        loadedAgainTargetUser.mutualCount += mutualDelta
+        await em.save(User, loadedAgainTargetUser)
     })
 }
 
@@ -475,7 +475,7 @@ export async function getBefriendedBy(googleid: string) {
 
 async function handleFriend(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     await doTransaction(async (em) => {
-        let [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
+        const [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
         if (action) {
             if (
                 loadedSourceUser.followers.some((user) => user.id === targetUserId)
@@ -760,7 +760,7 @@ async function checkRelation(sourceUserGoogleId: string, targetUserId: string, a
     if (!loadedSourceUser) {
         throw new Error("Unable to retrieve user using token.")
     }
-    let loadedTargetUser = await em.findOne(User, {
+    const loadedTargetUser = await em.findOne(User, {
         relations: {
             blockedUsers: true
         },

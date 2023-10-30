@@ -21,7 +21,7 @@ export async function createOrUpdateAccount(
 ) {
 
     // perform safe search detection on the avatar
-    if (!await safeSearchImage(avatarUploadFilename)) {
+    if (avatarUploadFilename && !await safeSearchImage(avatarUploadFilename)) {
         throw new Error(`avatar/Uploaded file has been found to likely contain objectionable content. See: terms of service.`)
     }
 

@@ -7,6 +7,9 @@ export async function getUserHasAvatar(googleid: string) {
 
 export async function safeSearchImage(filepath: string) {
     const [safeSearchResult] = await SAFE_SEARCH_CLIENT.safeSearchDetection(filepath)
+    if (!safeSearchResult) {
+        return true
+    }
     const safeSearchAnnotation = safeSearchResult.safeSearchAnnotation
     
     return ![safeSearchAnnotation["adult"], safeSearchAnnotation["medical"], safeSearchAnnotation["violence"]]

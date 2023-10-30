@@ -30,8 +30,8 @@ configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB2()
-    await testDB()
-    // startServer()
+    // await testDB()
+    startServer()
 })
 
 // Middleware to verify JWT tokens
@@ -209,6 +209,7 @@ function startServer() {
             const amount = consts.HANDLE_BATCH_SIZE
             const offset = convertedBatchNum * amount
             const usernames = await getSharedMutuals(userId, req.params.targetuserid, offset, amount)
+            console.log(usernames)
             callback({ usernames })
         })
     })
@@ -442,7 +443,7 @@ function handleCreateOrUpdateAccount(
                 fields.bio[0],
                 fields.shortBio[0],
                 uploadedFile ? uploadedFile.filepath : null,
-                !userId ? false : (fields.isDeleteAvatar ? true : false),
+                !userId ? false : (fields.isDeleteAvatar[0] === "true" ? true : false),
                 callback
             )
         } catch (error) {
