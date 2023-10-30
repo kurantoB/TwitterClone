@@ -328,10 +328,22 @@ export default function ViewProfile() {
         doAPICall('GET', `${route}/${batchNum}`, dispatch, navigate, token, (body) => {
             const usernames: string[] = body.usernames
             for (const username of usernames) {
+                if (state.some((user) => user.username === username)) {
+                    continue
+                }
                 doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (profileBody) => {
                     const currentUserList = state
                     const userToAdd: User = profileBody.user
                     currentUserList.push(userToAdd)
+                    currentUserList.sort((a, b) => {
+                        if (a.createTime < b.createTime) {
+                            return -1
+                        } else if (a.createTime > b.createTime) {
+                            return 1
+                        } else {
+                            return 0
+                        }
+                    })
                     stateSetter([...currentUserList])
                 })
             }

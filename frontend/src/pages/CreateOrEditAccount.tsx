@@ -15,6 +15,7 @@ type CreateOrEditAccountProps = {
 
 export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) {
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [deleteAvatar, setDeleteAvatar] = useState<boolean>(false)
     const [username, setUsername] = useState<string>("")
     const [bio, setBio] = useState<string>("")
     const [shortBio, setShortBio] = useState<string>("")
@@ -86,9 +87,10 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
         }
 
         const formData = new FormData()
-        if (selectedFile) {
+        if (selectedFile && !deleteAvatar) {
             formData.append('file', selectedFile)
         }
+        formData.append('isDeleteAvatar', deleteAvatar ? "true" : "false")
         if (!edit) {
             formData.append('username', username)
         }
@@ -163,6 +165,10 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
             setPreviewImage(null)
             setAvatarError(null)
         }
+    }
+
+    const handleDeleteAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+        setDeleteAvatar(event.target.checked)
     }
 
     const handleUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -246,8 +252,13 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                             name="avatar"
                             accept=".png, .jpg, .jpeg"
                             onChange={handleFileChange}
+                            disabled={deleteAvatar}
                         />
                         {avatarError && <p className="create-account--error">{avatarError}</p>}
+                        {edit && editUser?.avatar && <span>
+                            <input type="checkbox" id="isDeleteAvatar" name="isDeleteAvatar" onChange={handleDeleteAvatarChange} checked={deleteAvatar} />
+                            <label className="create-account--smallcaption" htmlFor="avatar">Delete avatar</label>
+                        </span>}
                     </div>
                     <hr />
                     <div>

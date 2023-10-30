@@ -498,6 +498,10 @@ a:visited {
 }
 
 .view-profile--empty {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
   height: 50px;
   position: relative;
 }
