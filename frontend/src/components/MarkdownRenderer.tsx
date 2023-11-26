@@ -10,8 +10,7 @@ export default function MarkdownRenderer({ markdownText }: MarkdownRendererProps
 
     useEffect(() => {
         const converter = new showdown.Converter()
-        const htmlText = converter.makeHtml(markdownText.replaceAll('[', '\\['))
-        setHtml(htmlText)
+        setHtml(converter.makeHtml(markdownText))
     }, [markdownText])
 
     return <div className="markdown-renderer" dangerouslySetInnerHTML={{ __html: html }} />

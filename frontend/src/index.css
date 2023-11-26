@@ -413,13 +413,37 @@ a:visited {
 }
 
 .view-profile--sticker svg {
+  width: 27px;
+  height: 27px;
+}
+
+.view-profile--sticker svg.view-profile--followsgraphic {
   stroke: #0a8a71;
+}
+
+.view-profile--sticker svg.view-profile--mutualsgraphic path {
+  fill: #0a8a71;
+}
+
+.view-profile--sticker svg.view-profile--friendsgraphic {
+  fill: #0a8a71;
+  scale: 80%;
 }
 
 .view-profile--stats {
   display: grid;
   width: 550px;
   grid-template-columns: 2fr 1fr 2fr 1fr 2fr;
+}
+
+.view-profile--followactions {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+
+.view-profile--followactions > * {
+  margin: 0 14px;
 }
 
 .view-profile--interactive {
@@ -511,6 +535,18 @@ a:visited {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
+}
+
+.view-profile > h1 {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.view-profile > h1 > svg.view-profile--friendsgraphic {
+  fill: #8891aa;
+  width: 32px;
+  height: 32px;
 }
 
 .blocked-handles--listitem {

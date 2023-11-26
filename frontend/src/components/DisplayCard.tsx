@@ -17,7 +17,7 @@ export default function DisplayCard({
                 <div className="avatar-container-big">
                     <img src={avatarImage ? avatarImage : `${window.location.origin}/images/user_icon.png`} />
                 </div>
-                <p className="display-card--handle">{(username ? username.substring(0, consts.MAX_USERNAME_LENGTH) : <br />)}</p>
+                <p className="display-card--handle">{(username ? `@${username.substring(0, consts.MAX_USERNAME_LENGTH)}` : '@')}</p>
             </div>
             {shortBio &&
                 <div className="display-card--caption">

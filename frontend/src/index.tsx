@@ -14,6 +14,7 @@ import WentWrong from './components/WentWrong';
 import ViewBlockedHandles from './pages/ViewBlockedHandles';
 import { useAppSelector } from './app/hooks';
 import ViewFriends from './pages/ViewFriends';
+import NewPost from './pages/NewPost';
 
 const router = createBrowserRouter([
   {
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
       {
         path: "/edit-profile",
         element: <CreateOrEditAccount edit={true} />
+      },
+      {
+        path: "/new-post/:replyingto",
+        element: <NewPost />
       },
       {
         path: "/error",

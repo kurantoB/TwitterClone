@@ -8,12 +8,17 @@ import connectSocket from "../app/socket"
 import DisplayCard from "../components/DisplayCard"
 import { useNavigate } from "react-router-dom"
 import { User } from "./ViewProfile"
+import { processTags, removeLinksFromMarkdown } from "../utils"
 
 type CreateOrEditAccountProps = {
     edit: boolean
 }
 
 export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) {
+    const accessToken = useAppSelector((state) => state.tokenId)
+    const userExists = useAppSelector((state) => state.userExists)
+    const navigate = useNavigate()
+
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
     const [deleteAvatar, setDeleteAvatar] = useState<boolean>(false)
     const [username, setUsername] = useState<string>("")
@@ -27,12 +32,19 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
     const [shortBioError, setShortBioError] = useState<string | null>(null)
 
     const dispatch = useAppDispatch()
-    const navigate = useNavigate()
-    const accessToken = useAppSelector((state) => state.tokenId)
 
     const [editUser, setEditUser] = useState<User | null>(null)
 
     useEffect(() => {
+        if (
+            !accessToken
+            || (edit && !userExists)
+            || (!edit && userExists)
+        ) {
+            navigate("/error")
+            return
+        }
+
         dispatch(setHeaderMode(HeaderMode.NONE))
         if (edit) {
             doAPICall('GET', '/get-username', dispatch, navigate, accessToken, (usernameBody) => {
@@ -57,8 +69,8 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
         event.preventDefault()
 
         if (!edit) {
-            if (username.length < 1 || username.length > consts.MAX_USERNAME_LENGTH) {
-                setUsernameError(`Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
+            if (username.length < 4 || username.length > consts.MAX_USERNAME_LENGTH) {
+                setUsernameError(`Handle must be between 4 and ${consts.MAX_USERNAME_LENGTH} characters.`)
             } else if (!/^[a-zA-Z0-9_]*$/.test(username)) {
                 setUsernameError("Only letters, numbers, and underscores are permitted in the handle.")
             }
@@ -173,9 +185,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
 
     const handleUsernameChange = (event: ChangeEvent<HTMLInputElement>) => {
         setUsername(event.target.value)
-        if (event.target.value.length > consts.MAX_USERNAME_LENGTH) {
-            setUsernameError(`Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
-        } else if (!/^[a-zA-Z0-9_]*$/.test(event.target.value)) {
+        if (!/^[a-zA-Z0-9_]*$/.test(event.target.value)) {
             setUsernameError("Only letters, numbers, and underscores are permitted in the handle.")
         } else {
             setUsernameError(null)
@@ -255,10 +265,10 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                             disabled={deleteAvatar}
                         />
                         {avatarError && <p className="create-account--error">{avatarError}</p>}
-                        {edit && editUser?.avatar && <span>
+                        {edit && editUser?.avatar && <>
                             <input type="checkbox" id="isDeleteAvatar" name="isDeleteAvatar" onChange={handleDeleteAvatarChange} checked={deleteAvatar} />
                             <label className="create-account--smallcaption" htmlFor="avatar">Delete avatar</label>
-                        </span>}
+                        </>}
                     </div>
                     <hr />
                     <div>
@@ -287,7 +297,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                         </div>
                         {bioError && <p className="create-account--error">{bioError}</p>}
                         <h3>Preview</h3>
-                        <MarkdownRenderer markdownText={bio} />
+                        <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(bio))[0]} />
                     </div>
                     <hr />
                     <div>

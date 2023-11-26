@@ -9,6 +9,7 @@ import { format } from "date-fns"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
 import ScrollableHandles from "../components/ScrollableHandles"
+import { processTags } from "../utils"
 
 export type User = {
     id: string
@@ -432,30 +433,29 @@ export default function ViewProfile() {
                 <>
                     <div>
                         {following && followedBy && <h3 className="view-profile--sticker">
-                            Mutuals&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-                            {following && followedBy && friend && <>&nbsp;Friend&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></>}
+                            Mutuals&nbsp;<svg className="view-profile--mutualsgraphic" xmlns="http://www.w3.org/2000/svg"><path d="M 15.602 8.522 L 8.404 8.522 L 8.405 5.764 C 8.405 4.954 7.457 4.54 6.885 5.098 L 0.279 11.536 C -0.093 11.899 -0.093 12.505 0.279 12.868 L 6.885 19.307 L 6.983 19.39 C 7.559 19.818 8.405 19.405 8.405 18.641 L 8.404 15.881 L 15.602 15.881 L 15.603 18.641 C 15.603 19.45 16.552 19.865 17.125 19.307 L 23.722 12.868 C 24.093 12.505 24.093 11.899 23.722 11.538 L 17.125 5.098 C 16.552 4.54 15.603 4.954 15.603 5.764 L 15.602 8.522 Z M 2.203 12.202 L 6.604 7.911 L 6.605 9.443 C 6.605 9.951 7.008 10.363 7.505 10.363 L 16.503 10.363 L 16.625 10.354 C 17.065 10.293 17.403 9.908 17.403 9.443 L 17.402 7.914 L 21.796 12.202 L 17.402 16.49 L 17.403 14.963 C 17.403 14.454 17 14.043 16.503 14.043 L 7.505 14.043 L 7.383 14.052 C 6.944 14.112 6.605 14.497 6.605 14.963 L 6.604 16.492 L 2.203 12.202 Z" fill="#212121" /></svg>
+                            {following && followedBy && friend && <>&nbsp;Friend&nbsp;<svg className="view-profile--friendsgraphic" xmlns="http://www.w3.org/2000/svg"><path d="M8,8c0,4.682,3.894,5.148,5.295,4.926s5.062-0.803,5.062-0.803l6.066,5.472l-11.68,8.958L3.606,17h-1.59L2,5h10.5  c0,0-2.06,0.717-2.742,0.968C9.075,6.218,8,6.542,8,8z" /><circle cx="23" cy="19" r="2" /><path d="M15,8.5c0,1.381-1.119,2.5-2.5,2.5S10,9.881,10,8.5V8h3.146L15,8.5z" /><circle cx="19" cy="7" r="2" /><circle cx="20" cy="21" r="2" /><circle cx="17" cy="23" r="2" /><circle cx="14" cy="25" r="2" /><path d="M29,19V7l-4,1l-5.144-2.808l-1.378-0.123L10,8l2.753,2.987L19,9.996c0,0,5.25,4.699,6.167,5.616  c0.88,0.88,1.75,1.543,1.819,3.388H29z" /></svg></>}
                         </h3>}
-                        {!following && followedBy && <h3 className="view-profile--sticker">Follows you&nbsp;<svg fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
+                        {!following && followedBy && <h3 className="view-profile--sticker">Follows you&nbsp;<svg className="view-profile--followsgraphic" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" xmlns="http://www.w3.org/2000/svg"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg></h3>}
                     </div>
                     <div>
-                        <span>
+                        <div className="view-profile--followactions">
                             {!following && <button className="largeButton" onClick={() => handleFollow(true)}>{followedBy ? "Follow Back" : "Follow"}</button>}
                             {!viewingOwn && following && <button className="largeButton" onClick={() => handleFollow(false)}>Unfollow</button>}
-                            &nbsp;&nbsp;
                             {following && followedBy && !friend && <button className="largeButton" onClick={() => handleFriend(true)}>Make friend</button>}
-                            {following && followedBy && friend && <button className="largeButton" onClick={() => handleFriend(false)}>Drop friend</button>}
-                        </span>
+                            {following && followedBy && friend && <button className="largeButton" onClick={() => handleFriend(false)}>Unfriend</button>}
+                        </div>
                     </div>
                 </>
 
             }
             <div>
                 <div className="view-profile--stats">
-                    <span>Followers: {user?.followerCount}</span>
-                    <span>|</span>
-                    <span>Following: {user?.followingCount}</span>
-                    <span>|</span>
-                    <span>Mutuals: {user?.mutualCount}</span>
+                    <div>Followers: {user?.followerCount}</div>
+                    <div>|</div>
+                    <div>Following: {user?.followingCount}</div>
+                    <div>|</div>
+                    <div>Mutuals: {user?.mutualCount}</div>
                 </div>
                 {user && <p>Joined {format(new Date(user.createTime), 'MMM yyyy')}</p>}
             </div>
@@ -487,7 +487,7 @@ export default function ViewProfile() {
             }
             <hr />
             <div>
-                <MarkdownRenderer markdownText={user ? user.bio : ""} />
+                <MarkdownRenderer markdownText={user ? processTags(user.bio.replace('[', '\\['))[0] : ""} />
             </div>
             <hr />
             {

@@ -48,6 +48,12 @@ export default function doAPICall(
         } else {
             resPromise = axiosInstance.post(route)
         }
+    } else if (method === 'PUT') {
+        if (formData) {
+            resPromise = axiosInstance.put(route, formData)
+        } else {
+            resPromise = axiosInstance.put(route)
+        }
     } else if (method === 'PATCH') {
         if (formData) {
             resPromise = axiosInstance.patch(route, formData)
