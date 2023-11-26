@@ -1,0 +1,6 @@
+runtime: nodejs18
+env_variables:
+  TYPEORM_HOST: '/cloudsql/twitterclone-399423:us-central1:twitterclone'
+  TYPEORM_USERNAME: 'dbuser'
+  TYPEORM_PASSWORD: 'kwafcsn'
+  TYPEORM_DATABASE: 'postgres'
