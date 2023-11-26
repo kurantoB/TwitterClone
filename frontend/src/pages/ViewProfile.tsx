@@ -184,7 +184,7 @@ export default function ViewProfile() {
         }, null, (error, body) => {
             navigate("/error")
         }, "userExists, username", [userExists, username])
-        window.scrollTo({ top: 0, behavior: "instant" })
+        window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior })
     }, [userExists, username])
 
     const handleFollow = (action: boolean) => {

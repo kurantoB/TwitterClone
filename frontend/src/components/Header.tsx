@@ -20,12 +20,12 @@ export default function Header() {
             doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
                 dispatch(findUser())
                 // user account exists for this Google ID - connect to websocket service
-                connectSocket(body.userId, dispatch)
+                // connectSocket(body.userId, dispatch)
             }, null, (error, body) => {
                 if (error !== "User not found.") {
                     dispatch(addErrorMessage(error))
                     console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                    window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
                 }
             })
         }

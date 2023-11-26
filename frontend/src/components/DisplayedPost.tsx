@@ -119,7 +119,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
     const flagPost = () => {
         doAPICall('PUT', `/report-post/${postId}`, dispatch, navigate, token, (body) => {
             dispatch(addErrorMessage(body.reportStatus))
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+            window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
         })
     }
 

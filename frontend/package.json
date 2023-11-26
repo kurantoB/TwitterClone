@@ -54,6 +54,6 @@
     "@types/react": "^18.2.24",
     "@types/react-router-dom": "^5.3.3",
     "@types/showdown": "^2.0.2",
-    "typescript": "^5.2.2"
+    "typescript": "^4"
   }
 }

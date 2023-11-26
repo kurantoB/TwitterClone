@@ -94,7 +94,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
 
         if (usernameError || avatarError || bioError) {
             dispatch(addErrorMessage(`Unable to ${edit ? "update" : "create"} account - please fix the below issues before retrying.`))
-            window.scrollTo({ top: 0, behavior: 'smooth' })
+            window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
             return
         }
 
@@ -132,13 +132,13 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                         }
                     }
                     dispatch(addErrorMessage(`Unable to ${edit ? "update" : "create"} account - please fix the below issues before retrying.`))
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                    window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
                 } else {
                     doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (userIdBody) => {
                         if (!edit) {
                             dispatch(findUser())
                             // user account exists for this Google ID - connect to websocket service
-                            connectSocket(userIdBody.userId, dispatch)
+                            // connectSocket(userIdBody.userId, dispatch)
                         }
                         navigate(`/u/${username}`)
                     })
