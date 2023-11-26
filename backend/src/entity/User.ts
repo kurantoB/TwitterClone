@@ -1,5 +1,6 @@
-import { Entity, Column, Index, ManyToMany, JoinTable, CreateDateColumn, PrimaryGeneratedColumn } from "typeorm"
+import { Entity, Column, Index, ManyToMany, JoinTable, CreateDateColumn, PrimaryGeneratedColumn, OneToMany } from "typeorm"
 import consts from "../consts"
+import { TagSubscription } from "./TagSubscription"
 
 @Entity()
 export class User {
@@ -25,15 +26,14 @@ export class User {
 
     @ManyToMany(
         () => User,
-        (user) => user.following,
+        (user) => user.following
     )
     @JoinTable()
     followers: User[]
 
     @ManyToMany(
         () => User,
-        (user) => user.followers,
-        { cascade: true }
+        (user) => user.followers
     )
     following: User[]
 
@@ -71,6 +71,13 @@ export class User {
     @ManyToMany(() => User)
     @JoinTable()
     blockedUsers: User[]
+
+    @OneToMany(
+        () => TagSubscription,
+        (tagsub) => tagsub.user,
+        { onDelete: "CASCADE" }
+    )
+    tagsubs: TagSubscription[]
 
     @CreateDateColumn({ type: "timestamptz" })
     createTime: Date

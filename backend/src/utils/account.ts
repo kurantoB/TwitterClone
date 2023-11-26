@@ -1,9 +1,7 @@
 import * as Persistence from "../persistence"
-import { Storage } from "@google-cloud/storage"
 import consts from "../consts"
 import { getUserIdFromToken } from "../userGetter"
-import { SAFE_SEARCH_CLIENT } from "../index"
-import { safeSearchImage } from "./generalAPI"
+import { deleteMedia, safeSearchImage, storeMedia } from "./general"
 
 export async function getUserByUsername(username: string) {
     return await Persistence.getUserByUsername(username)
@@ -33,7 +31,7 @@ export async function createOrUpdateAccount(
     try {
         if (isDeleteAvatar) {
             const deleteAvatarFilename = await Persistence.deleteAndGetUserAvatar(userId)
-            await deleteAvatarFromCloudStorage(deleteAvatarFilename)
+            await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, avatarFilename)
         }
         if (avatarUploadFilename) {
             if (!userId) {
@@ -42,9 +40,11 @@ export async function createOrUpdateAccount(
             }
 
             avatarFilename = `${userId}_avatar`
-            const storage = new Storage()
-            const bucket = storage.bucket(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME)
-            await bucket.upload(avatarUploadFilename, { destination: avatarFilename })
+            await storeMedia(
+                consts.CLOUD_STORAGE_AVATAR_BUCKETNAME,
+                avatarUploadFilename,
+                avatarFilename
+            )
         }
     } catch (error) {
         // TODO: report cloud storage errors
@@ -61,7 +61,7 @@ export async function createOrUpdateAccount(
     }
 }
 
-export async function deleteUser(
+export async function deleteUserAccount(
     googleid: string,
     callback: (responseVal: any) => void
 ) {
@@ -72,18 +72,10 @@ export async function deleteUser(
 
     if (avatarFilename) {
         try {
-            await deleteAvatarFromCloudStorage(avatarFilename)
+            await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, avatarFilename)
         } catch (error) {
             // TODO: report cloud storage errors
             console.log(`Cloud storage error: ${error.message}`)
         }
     }
-}
-
-async function deleteAvatarFromCloudStorage(avatarFilename: string) {
-    const storage = new Storage()
-    await storage
-        .bucket(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME)
-        .file(avatarFilename)
-        .delete()
 }

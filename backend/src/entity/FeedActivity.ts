@@ -13,15 +13,20 @@ export class FeedActivity {
     @PrimaryColumn({ type: 'varchar' })
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
-    @Index()
     sourceUser: User
 
     @PrimaryColumn({ type: 'varchar' })
     @ManyToOne(
         () => Post,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     sourcePost: Post
 

@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn, PrimaryGeneratedColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { User } from "./User";
 
 @Entity()
@@ -9,7 +9,10 @@ export class ActionTaken {
     @Column({ type: 'varchar' })
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     @Index()
     targetUser: User

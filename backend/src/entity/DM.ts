@@ -16,7 +16,8 @@ export class DM {
         () => User, 
         {
             nullable: true,
-            onDelete: "SET NULL"
+            onDelete: "SET NULL",
+            eager: true
         }
     )
     @Index()
@@ -26,7 +27,8 @@ export class DM {
         () => User,
         {
             nullable: true,
-            onDelete: "SET NULL"
+            onDelete: "SET NULL",
+            eager: true
         }
     )
     @Index()

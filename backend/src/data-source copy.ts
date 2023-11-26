@@ -11,11 +11,11 @@ import { PostToParentMapping } from "./entity/PostToParentMapping"
 
 export const AppDataSource = new DataSource({
     type: "postgres",
-    host: "34.69.52.241",
+    host: "localhost",
     port: 5432,
-    username: "dbuser",
+    username: "postgres",
     password: "kwafcsn",
-    database: "postgres",
+    database: "test",
     synchronize: true,
     logging: false,
     entities: [FeedActivity, User, Post, Notification, DM, Hashtag, TagSubscription, PostToParentMapping],

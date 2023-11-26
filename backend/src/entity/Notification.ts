@@ -18,7 +18,10 @@ export class Notification {
 
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     @Index()
     user: User
@@ -33,14 +36,18 @@ export class Notification {
         () => Post, 
         {
             nullable: true,
-            onDelete: "CASCADE"
+            onDelete: "CASCADE",
+            eager: true
         }
     )
     sourcePost: Post
 
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     sourceUser: User
 

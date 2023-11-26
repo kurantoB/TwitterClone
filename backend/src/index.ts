@@ -1,23 +1,26 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { blockUser, follow, followHook, friend, friendHook, getBlocklist, getFollowRelationship, getFriends, initialize as initializePersistence, isBlockedBy, isBlocking, unblockUser, unfollow, unfriend } from "./persistence"
-import { getAllFollowers, getAllFollowing, getAllMutuals, getCommonFollowing, getSpecificFollowers, getSpecificFollowing } from "./api/followInfoAPI"
-import { getCommonFollowers } from "./api/followInfoAPI"
-import { getUnacquaintedMutuals } from "./api/followInfoAPI"
-import { getMutualsYouFollow } from "./api/followInfoAPI"
-import { getMutualsFollowingYou } from "./api/followInfoAPI"
-import { getSharedMutuals } from "./api/followInfoAPI"
-import { createOrUpdateAccount, deleteUser, getUserByUsername } from "./api/accountAPI"
+import { attachPostMedia, blockUser, deletePost, follow, followHook, friend, friendHook, getBlocklist, getFollowRelationship, getFriends, getIsPostVisible, getParentPostsByMappingIds, getPostActivityFromUser, getPostByID, getPostMetadata, getUserByGoogleID, initialize as initializePersistence, isBlockedBy, isBlocking, likePost, postOrReply, postOrReplyHook, reportPost, repostPost, unblockUser, unfollow, unfriend, unlikePost, unrepostPost } from "./persistence"
+import { getAllFollowers, getAllFollowing, getAllMutuals, getCommonFollowing, getSpecificFollowers, getSpecificFollowing } from "./utils/followInfo"
+import { getCommonFollowers } from "./utils/followInfo"
+import { getUnacquaintedMutuals } from "./utils/followInfo"
+import { getMutualsYouFollow } from "./utils/followInfo"
+import { getMutualsFollowingYou } from "./utils/followInfo"
+import { getSharedMutuals } from "./utils/followInfo"
+import { createOrUpdateAccount, deleteUserAccount, getUserByUsername } from "./utils/account"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
 import { LoginTicket, OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
-import { getUserHasAvatar } from "./api/generalAPI"
+import { deleteMedia, getUserHasAvatar, safeSearchImage } from "./utils/general"
 import testDB, { clearDB, testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 import { ImageAnnotatorClient } from "@google-cloud/vision"
+import { VisibilityType } from "./entity/Post"
+import { validateHashtags } from "./utils/hashtag"
+import { User } from "./entity/User"
 
 /*
 Responses will be in the format { body }
@@ -378,7 +381,210 @@ function startServer() {
 
     app.delete('/delete-account', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            await deleteUser(req.user.sub, callback)
+            await deleteUserAccount(req.user.sub, callback)
+        })
+    })
+
+    app.post('/new-post/', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const form = formidable({ multiples: false })
+            form.parse(req, async (
+                err,
+                fields: Formidable.AccountFields,
+                files: Files
+            ) => {
+                if (err) {
+                    throw new Error(`Failed to read new post request: ${err.message}`)
+                }
+                const formErrors: string[] = []
+
+                if (fields.message[0].length === 0) {
+                    if (!files.file || files.file[0].size === 0) {
+                        formErrors.push(`message/Post can't be empty.`)
+                    }
+                } else if (fields.message[0].length > consts.MAX_POST_LENGTH) {
+                    formErrors.push(`message/Post message can not exceed ${consts.MAX_POST_LENGTH} characters.`)
+                }
+
+                let hashtags: string[] = []
+
+                let testHashtags = ""
+                const messageLines = fields.message[0].split(/\n/)
+                for (const messageLine of messageLines) {
+                    const tokenized = messageLine.split(/\s+/)
+                    for (const token of tokenized) {
+                        if (token.startsWith('#')) {
+                            testHashtags += token + ' '
+                        }
+                    }
+                }
+
+                const [hashtagFormError, capturedHashtags] = validateHashtags(testHashtags, true)
+                if (hashtagFormError) {
+                    formErrors.push(`hashtags/${hashtagFormError}`)
+                } else {
+                    hashtags = capturedHashtags
+                }
+
+                if (files.file && files.file[0].size > 0) {
+                    const uploadedFile = files.file[0]
+                    if (uploadedFile.mimetype !== "image/png" && uploadedFile.mimetype !== "image/jpeg") {
+                        formErrors.push(`media/Media file must be in PNG or JPEG format.`)
+                    }
+                    if (uploadedFile.size > consts.MAX_POST_MEDIA_BYTES) {
+                        formErrors.push(`media/Media file size must not exceed ${Math.floor(consts.MAX_POST_MEDIA_BYTES / 1024)} KB.`)
+                    }
+                    // perform safe search detection on the media file
+                    if (!await safeSearchImage(uploadedFile.filepath)) {
+                        formErrors.push(`media/Uploaded media file has been found to likely contain objectionable content. See: terms of service.`)
+                    }
+                }
+
+                if (formErrors.length > 0) {
+                    callback({ formErrors })
+                    return
+                }
+
+                let visibility: VisibilityType
+                switch (req.body.visibility) {
+                    case "friends":
+                        visibility = VisibilityType.FRIENDS
+                        break
+                    case "mutuals":
+                        visibility = VisibilityType.MUTUALS
+                        break
+                    default:
+                        visibility = VisibilityType.EVERYONE
+                        break
+                }
+
+                let parentPosts: string[] = null
+                if (req.body.parentPost1) {
+                    parentPosts = [req.body.parentPost1]
+                }
+                if (req.body.parentPost2) {
+                    parentPosts.push(req.body.parentPost2)
+                }
+
+                let newPost = await postOrReply(
+                    req.user.sub,
+                    fields.message[0],
+                    visibility,
+                    req.body.vpgoogleid,
+                    parentPosts,
+                    hashtags
+                )
+                const uploadedFile = files.file ? files.file[0] : null
+                if (uploadedFile) {
+                    newPost = await attachPostMedia(newPost, uploadedFile.filepath)
+                }
+                await postOrReplyHook(newPost, parentPosts)
+                callback("OK")
+            })
+        })
+    })
+
+    app.post('/delete-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const post = await getPostByID(req.params.postid)
+            if (post.author.googleid !== req.user.sub) {
+                throw new Error("Unauthorized delete post request")
+            }
+            if (post.media) {
+                await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, post.id + "_media")
+            }
+            await deletePost(post)
+            callback("OK")
+        })
+    })
+
+    app.get('/get-post-public/:postid', async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const post = await getPostByID(req.params.postid)
+            if (!post) {
+                throw new Error("Unable to find post")
+            }
+            const visibility = post.visibility
+            if (visibility !== VisibilityType.EVERYONE) {
+                throw new Error("This post is restricted")
+            }
+            const [numReplies, numLikes, numReposts] = await getPostMetadata(post)
+            callback({
+                post: { ...post, numReplies, numLikes, numReposts }
+            })
+        })
+    })
+
+    app.get('/get-post-logged-in/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const post = await getPostByID(req.params.postid)
+            if (!post) {
+                throw new Error("Unable to find post")
+            }
+            if (getIsPostVisible(req.user.sub, post)) {
+                const [numReplies, numLikes, numReposts] = await getPostMetadata(post)
+                const [liked, reposted] = await getPostActivityFromUser(req.user.sub, post)
+                callback({
+                    post: { ...post, numReplies, numLikes, numReposts, liked, reposted }
+                })
+            } else {
+                throw new Error("This post is restricted")
+            }
+        })
+    })
+
+    app.get('/get-parent-posts-from-mappings/:mappingids', async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const mappingIds = req.params.mappingids.split(',')
+            const posts = await getParentPostsByMappingIds(mappingIds)
+            callback({ posts })
+        })
+    })
+
+    app.put('/report-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const reporter = await getUserByGoogleID(req.user.sub)
+            if (!reporter) {
+                throw new Error("User not found")
+            }
+            const post = await getPostByID(req.params.postid)
+            callback({ reportStatus: await reportPost(post, reporter) })
+        })
+    })
+
+    app.put('/like-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const user = await getUserByGoogleID(req.user.sub)
+            const post = await getPostByID(req.params.postid)
+            await likePost(user, post)
+            callback({ success: true })
+        })
+    })
+
+    app.put('/unlike-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const user = await getUserByGoogleID(req.user.sub)
+            const post = await getPostByID(req.params.postid)
+            await unlikePost(user, post)
+            callback({ success: true })
+        })
+    })
+
+    app.put('/repost-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const user = await getUserByGoogleID(req.user.sub)
+            const post = await getPostByID(req.params.postid)
+            await repostPost(user, post)
+            callback({ success: true })
+        })
+    })
+
+    app.put('/unrepost-post/:postid', verifyToken, async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            const user = await getUserByGoogleID(req.user.sub)
+            const post = await getPostByID(req.params.postid)
+            await unrepostPost(user, post)
+            callback({ success: true })
         })
     })
 
@@ -442,8 +648,8 @@ function handleCreateOrUpdateAccount(
         }
         const formErrors: string[] = []
         if (!userId) {
-            if (fields.username[0].length === 0 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
-                formErrors.push(`username/Handle must be between 1 and ${consts.MAX_USERNAME_LENGTH} characters.`)
+            if (fields.username[0].length < 4 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
+                formErrors.push(`username/Handle must be between 4 and ${consts.MAX_USERNAME_LENGTH} characters.`)
             } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
                 formErrors.push("Only letters, numbers, and underscores are permitted in the handle.")
             }

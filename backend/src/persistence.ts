@@ -1,4 +1,4 @@
-import { EntityManager, IsNull, MoreThan } from "typeorm";
+import { EntityManager, In, IsNull, MoreThan } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -8,6 +8,11 @@ import { User } from "./entity/User";
 import { AppDataSource } from "./data-source";
 import { PostReport } from "./entity/PostReport";
 import { ActionTaken } from "./entity/ActionTaken";
+import { deleteMedia, storeMedia } from "./utils/general";
+import { Hashtag } from "./entity/Hashtag";
+import { PostToParentMapping } from "./entity/PostToParentMapping";
+import { isFriendOf, isMutualOf } from "./utils/followInfo";
+import { likingUsersSQB, replyMappingsSQB, repostingUsersSQB } from "./utils/post";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -60,6 +65,13 @@ export async function deleteUser(googleid: string) {
         ]
     })
     await AppDataSource.getRepository(DM).remove(dmsToDelete)
+
+    const posts = await AppDataSource.getRepository(Post).findBy({ author: user })
+    for (const post of posts) {
+        if (post.media) {
+            await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, post.id + "_media")
+        }
+    }
     return await AppDataSource.getRepository(User).remove(user)
 }
 
@@ -125,51 +137,123 @@ export async function getUserAvatar(googleid: string) {
 // posts
 
 export async function postOrReply(
-    user: User,
+    googleid: string,
     message: string,
     visibility: VisibilityType,
-    parentPostIds: string[] = null
+    visibilityPerspectiveGoogleId: string,
+    parentPostIds: string[], // nullable
+    hashtags: string[]
 ) {
     const userPostCount = await AppDataSource.getRepository(Post).count({
-        where: { author: { id: user.id } }
+        where: { author: { googleid } }
     })
     if (userPostCount >= consts.MAX_POSTS_PER_USER) {
         throw new Error("Max number of posts per user exceeded.")
     }
 
-    const newPost = new Post()
-    newPost.author = user
-    if (message.length > consts.MAX_POST_PREVIEW_LENGTH) {
+    let newPost: Post
+
+    await doTransaction(async (em) => {
+        newPost = new Post()
+        const user = await getUserByGoogleID(googleid)
+        newPost.author = user
+
         if (message.length > consts.MAX_POST_LENGTH) {
             throw new Error("Post is too long.")
         }
-        newPost.body = message.substring(0, consts.MAX_POST_PREVIEW_LENGTH)
-        newPost.extension = message.substring(consts.MAX_POST_PREVIEW_LENGTH)
-    } else {
-        newPost.body = message
+
+        const [previewSubstring, extensionSubstring] = getPreviewSubstring(message)
+        newPost.body = previewSubstring
+        newPost.extension = extensionSubstring
+
+        newPost.visibility = visibility
+        newPost.visibilityPerspective = await getUserByGoogleID(visibilityPerspectiveGoogleId)
+        newPost.hashtags = []
+
+        const affectedTags: Hashtag[] = []
+        for (const tagString of hashtags) {
+            const tag = await em.getRepository(Hashtag).findOne({
+                relations: { posts: true },
+                where: { tag: tagString }
+            })
+            if (!tag) {
+                let newTag = new Hashtag()
+                newTag.tag = tagString
+                newTag.posts = []
+                newTag = await em.getRepository(Hashtag).save(newTag)
+                newPost.hashtags.push(newTag)
+                const reloadedNewTag = await em.getRepository(Hashtag).findOne({
+                    relations: { posts: true },
+                    where: { id: newTag.id }
+                })
+                affectedTags.push(reloadedNewTag)
+            } else {
+                affectedTags.push(tag)
+            }
+        }
+
+        newPost = await em.getRepository(Post).save(newPost)
+
+        if (parentPostIds) {
+            for (const parentPostId of parentPostIds) {
+                const newMapping = new PostToParentMapping()
+                newMapping.post = newPost
+                newMapping.parent = await getPostByID(parentPostId)
+                await em.getRepository(PostToParentMapping).save(newMapping)
+            }
+        }
+
+        if (affectedTags.length > 0) {
+            const reloadedNewPost = await em.getRepository(Post).findOne({
+                relations: { hashtags: true },
+                where: { id: newPost.id }
+            })
+            for (const tag of affectedTags) {
+                tag.posts.push(reloadedNewPost)
+                reloadedNewPost.hashtags.push(tag)
+                await em.getRepository(Hashtag).save(tag)
+            }
+            newPost = await em.getRepository(Post).save(reloadedNewPost)
+        }
+    })
+
+    return newPost
+}
+
+function getPreviewSubstring(message: string) {
+    if (!message) {
+        return [null, null]
     }
-    newPost.visibility = visibility
-    if (parentPostIds) {
-        newPost.parentPostIds = parentPostIds.reduce((previousValue, currentValue) => `${previousValue}/${currentValue}`)
+    let extensionStartIndex = message.length > consts.MAX_POST_PREVIEW_LENGTH ? consts.MAX_POST_PREVIEW_LENGTH : -1
+    const tentativePreview = message.substring(0, consts.MAX_POST_PREVIEW_LENGTH)
+    if ((tentativePreview.match(/\n/g) || []).length >= consts.MAX_POST_PREVIEW_LINES) {
+        let newLineOccurrences = 0
+        for (let i = 0; i < message.length; i++) {
+            if (message[i] === '\n') {
+                newLineOccurrences++
+                if (newLineOccurrences === consts.MAX_POST_PREVIEW_LINES) {
+                    extensionStartIndex = i
+                    break
+                }
+            }
+        }
     }
-    return await AppDataSource.getRepository(Post).save(newPost)
+    return [message.substring(0, extensionStartIndex), extensionStartIndex === -1 ? null : message.substring(extensionStartIndex)]
 }
 
 export async function postOrReplyHook(
     newPost: Post,
-    parentPost: Post = null,
+    parentPostIds: string[] // nullable
 ) {
-    if (parentPost) {
-        try {
+    if (parentPostIds) {
+        for (const postId of parentPostIds) {
+            const postAuthor = (await getPostByID(postId)).author
             await makeNotification(
-                parentPost.author,
+                postAuthor,
                 NotificationType.REPLY,
                 newPost,
                 newPost.author
             )
-        } catch (error) {
-            console.log("post or reply hook make notification error")
-            // do nothing
         }
     }
     return await makeFeedActivity(
@@ -179,9 +263,70 @@ export async function postOrReplyHook(
     )
 }
 
+export async function attachPostMedia(post: Post, filepath: string) {
+    const mediaPath = post.id + "_media"
+    await storeMedia(
+        consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME,
+        filepath,
+        mediaPath
+    )
+    post.media = mediaPath
+    return await AppDataSource.getRepository(Post).save(post)
+}
+
 // make sure the media is cleared from storage first
 export async function deletePost(post: Post) {
     return await AppDataSource.getRepository(Post).remove(post)
+}
+
+
+
+// post viewing
+
+export async function getParentPostsByMappingIds(ids: string[]) {
+    return await AppDataSource.getRepository(Post)
+        .createQueryBuilder("post")
+        .where((qb) => {
+            const subQuery = qb
+                .subQuery()
+                .select("parentpost.id")
+                .from(PostToParentMapping, "mapping")
+                .innerJoin("mapping.parent", "parentpost")
+                .where("mapping.id IN (:...ids)", { ids })
+                .getQuery()
+            return "post.id IN " + subQuery
+        })
+        .getMany()
+}
+
+export async function getIsPostVisible(viewerGoogleId: string, post: Post) {
+    const visibility = post.visibility
+    if (visibility === VisibilityType.EVERYONE) {
+        return true
+    }
+    if (visibility === VisibilityType.MUTUALS) {
+        return await isMutualOf(viewerGoogleId, post.visibilityPerspective)
+    }
+    if (visibility === VisibilityType.FRIENDS) {
+        return await isFriendOf(viewerGoogleId, post.visibilityPerspective)
+    }
+}
+
+export async function getPostMetadata(post: Post) {
+    const numReplies = await replyMappingsSQB(post.id).getCount()
+    const numLikes = await likingUsersSQB(post.id).getCount()
+    const numReposts = await repostingUsersSQB(post.id).getCount()
+    return [numReplies, numLikes, numReposts]
+}
+
+export async function getPostActivityFromUser(googleId: string, post: Post) {
+    const liked = (await likingUsersSQB(post.id)
+        .andWhere("liking.googleid = :googleId", { googleId })
+        .getOne()) ? true : false
+    const reposted = (await repostingUsersSQB(post.id)
+        .andWhere("reposter.googleid = :googleId", { googleId })
+        .getOne()) ? true : false
+    return [liked, reposted]
 }
 
 
@@ -192,17 +337,55 @@ export async function reportPost(
     post: Post,
     reporter: User
 ) {
+    let reportStatus = "Post flagged - action will be taken if it is found to violate our terms of service."
+    const oneHourAgo = new Date()
+    oneHourAgo.setHours(oneHourAgo.getHours() - 1)
+
     const report = new PostReport()
-    report.postId = post.id
+    report.post = post
     report.reporter = reporter
     const date = new Date()
     date.setDate(date.getDate() + consts.REPORT_EXPIRY_DAYS)
     report.expiryDate = date
-    await AppDataSource.getRepository(PostReport).save(report)
+
+    await AppDataSource.manager.transaction(
+        "SERIALIZABLE",
+        async (em) => {
+            if (await em
+                .getRepository(PostReport)
+                .createQueryBuilder("report")
+                .innerJoin("report.reporter", "reporter")
+                .where("reporter.id = :reporterId", { reporterId: reporter.id })
+                .andWhere("report.reportTime >= :oneHourAgo", { oneHourAgo })
+                .getCount() < consts.MAX_REPORTS_PER_HOUR
+            ) {
+                reportStatus = `Post flagging is capped at ${consts.MAX_REPORTS_PER_HOUR} an hour.`
+                return
+            }
+
+            if (await em
+                .getRepository(PostReport)
+                .createQueryBuilder("report")
+                .innerJoin("report.post", "post", "post.id = postId", { postId: post.id })
+                .getCount() > 0
+            ) {
+                reportStatus = `This post has already been flagged - action will be taken if it is found to violate our terms of service.`
+                return
+            }
+
+            await em.getRepository(PostReport).save(report)
+        }
+    )
+
+    return reportStatus
 }
 
 export async function takeActionOnReport(report: PostReport) {
-    // delete account if tolerance level is exceeded
+    if (report.post.media) {
+        await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, report.post.id + "_media")
+    }
+    await deletePost(report.post)
+
     const currentTimeInMilliseconds = new Date().getTime()
     const newTimeInMilliseconds = currentTimeInMilliseconds - (86400000 * consts.ACCOUNT_TOLERANCE_DURATION_DAYS)
     const newDate = new Date(newTimeInMilliseconds)
@@ -211,20 +394,33 @@ export async function takeActionOnReport(report: PostReport) {
         actionTime: MoreThan(newDate)
     })
     if (actionsTaken >= consts.ACCOUNT_TOLERANCE_QUANTITY) {
+        // delete account if tolerance level is exceeded
+        if (report.reportee.avatar) {
+            try {
+                await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, report.reportee.avatar)
+            } catch (error) {
+                // TODO: report cloud storage errors
+                console.log(`Cloud storage error: ${error.message}`)
+            }
+        }
         await deleteUser(report.reportee.googleid)
-        return
+    } else {
+        const actionTaken = new ActionTaken()
+        actionTaken.targetUser = report.reportee
+        const expiryDate = new Date()
+        expiryDate.setDate(expiryDate.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
+        actionTaken.expiryDate = expiryDate
+        await AppDataSource.getRepository(ActionTaken).save(actionTaken)
     }
-
-    const actionTaken = new ActionTaken()
-    actionTaken.targetUser = report.reportee
-    const expiryDate = new Date()
-    expiryDate.setDate(expiryDate.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
-    actionTaken.expiryDate = expiryDate
-    await AppDataSource.getRepository(ActionTaken).save(actionTaken)
+    await AppDataSource.getRepository(PostReport).remove(report)
 }
 
 export async function takeActionOnReportHook(report: PostReport) {
-    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, null,  null)
+    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, null, null)
+}
+
+export async function dismissReport(report: PostReport) {
+    await AppDataSource.getRepository(PostReport).remove(report)
 }
 
 
@@ -264,8 +460,7 @@ export async function likePostHook(user: User, post: Post, action: boolean) {
 async function handleLikePost(user: User, { id }: Post, action: boolean) {
     const loadedPost = await AppDataSource.getRepository(Post).findOne({
         relations: {
-            likedBy: true,
-            author: true
+            likedBy: true
         },
         where: { id }
     })
@@ -801,7 +996,17 @@ async function checkRelation(sourceUserGoogleId: string, targetUserId: string, a
 export async function clearDB() {
     try {
         const users = await AppDataSource.getRepository(User).find()
-        await AppDataSource.getRepository(User).remove(users)
+        for (const user of users) {
+            await deleteUser(user.googleid)
+            if (user.avatar) {
+                try {
+                    await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, user.avatar)
+                } catch (error) {
+                    // TODO: report cloud storage errors
+                    console.log(`Cloud storage error: ${error.message}`)
+                }
+            }
+        }
     } catch (error) {
         console.log("error clearing users: " + error.message)
         throw error

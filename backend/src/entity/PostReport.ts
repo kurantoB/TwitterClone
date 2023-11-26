@@ -1,23 +1,38 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn } from "typeorm";
-import { User } from "./User";
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, OneToOne, PrimaryGeneratedColumn } from "typeorm"
+import { User } from "./User"
+import { Post } from "./Post"
 
 @Entity()
 export class PostReport {
-    @PrimaryColumn({ type: 'varchar' })
-    @Index()
-    postId: string
+    @PrimaryGeneratedColumn("uuid")
+    id: string
 
-    @PrimaryColumn({ type: 'varchar' })
+    @OneToOne(
+        () => Post,
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
+    )
+    @JoinColumn()
+    post: Post
+
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     @Index()
     reporter: User
 
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     @Index()
     reportee: User

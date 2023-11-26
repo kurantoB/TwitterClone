@@ -1,6 +1,20 @@
-import { AppDataSource } from "../data-source";
-import { User } from "../entity/User";
+import { SelectQueryBuilder } from "typeorm"
+import { AppDataSource } from "../data-source"
+import { User } from "../entity/User"
 
+function getIsMutualOfQuery(userAlias: string, idParam: string, idParamObject: any) {
+    return (qb: SelectQueryBuilder<User>) => {
+        const subQuery = qb
+            .subQuery()
+            .select("follower.id")
+            .from(User, "sourceuser")
+            .innerJoin("sourceuser.followers", "follower")
+            .innerJoin("sourceuser.following", "following", "following.id = follower.id")
+            .where(`sourceuser.id = :${idParam}`, idParamObject)
+            .getQuery()
+        return `${userAlias}.id IN ${subQuery}`
+    }
+}
 
 export async function getSharedMutuals(id: string, targetUserId: string, offset: number, amount: number) {
     // get handles in both my mutuals and their mutuals
@@ -8,35 +22,13 @@ export async function getSharedMutuals(id: string, targetUserId: string, offset:
         .getRepository(User)
         .createQueryBuilder("user")
         .select("user.username")
-        .where((qb) => {
-            // my mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
-        .andWhere((qb) => {
-            // their mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :targetUserId", { targetUserId })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
+        .where(getIsMutualOfQuery("user", "id", { id }))
+        .andWhere(getIsMutualOfQuery("user", "targetUserId", { targetUserId }))
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getMutualsFollowingYou(id: string, targetUserId: string, offset: number, amount: number) {
@@ -61,29 +53,18 @@ export async function getMutualsFollowingYou(id: string, targetUserId: string, o
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.following", "following")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "follower.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "follower.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
-        .andWhere((qb) => {
-            // their mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :targetUserId", { targetUserId })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
+        .andWhere(getIsMutualOfQuery("user", "targetUserId", { targetUserId }))
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getMutualsYouFollow(id: string, targetUserId: string, offset: number, amount: number) {
@@ -108,29 +89,18 @@ export async function getMutualsYouFollow(id: string, targetUserId: string, offs
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.followers", "follower")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "following.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "following.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
-        .andWhere((qb) => {
-            // their mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :targetUserId", { targetUserId })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
+        .andWhere(getIsMutualOfQuery("user", "targetUserId", { targetUserId }))
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getUnacquaintedMutuals(id: string, targetUserId: string, offset: number, amount: number) {
@@ -147,8 +117,8 @@ export async function getUnacquaintedMutuals(id: string, targetUserId: string, o
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.followers", "follower")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
         .andWhere((qb) => {
             // not my following
@@ -158,26 +128,15 @@ export async function getUnacquaintedMutuals(id: string, targetUserId: string, o
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.following", "following")
                 .where("sourceuser.id = :id2", { id2: id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
-        .andWhere((qb) => {
-            // their mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :targetUserId", { targetUserId })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
+        .andWhere(getIsMutualOfQuery("user", "targetUserId", { targetUserId }))
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getCommonFollowers(id: string, targetUserId: string, offset: number, amount: number) {
@@ -194,8 +153,8 @@ export async function getCommonFollowers(id: string, targetUserId: string, offse
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.followers", "follower")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .andWhere((followersNotFollowingQb) => {
             // their followers and not their following
@@ -213,17 +172,17 @@ export async function getCommonFollowers(id: string, targetUserId: string, offse
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.following", "following")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "follower.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "follower.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getSpecificFollowers(id: string, targetUserId: string, offset: number, amount: number) {
@@ -240,8 +199,8 @@ export async function getSpecificFollowers(id: string, targetUserId: string, off
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.followers", "follower")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
         .andWhere((followersNotFollowingQb) => {
             // their followers and not their following
@@ -259,17 +218,17 @@ export async function getSpecificFollowers(id: string, targetUserId: string, off
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.following", "following")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "follower.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "follower.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getCommonFollowing(id: string, targetUserId: string, offset: number, amount: number) {
@@ -286,8 +245,8 @@ export async function getCommonFollowing(id: string, targetUserId: string, offse
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.following", "following")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .andWhere((followingNotFollowersQb) => {
             // their following and not their followers
@@ -305,17 +264,17 @@ export async function getCommonFollowing(id: string, targetUserId: string, offse
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.followers", "follower")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "following.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "following.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getSpecificFollowing(id: string, targetUserId: string, offset: number, amount: number) {
@@ -332,8 +291,8 @@ export async function getSpecificFollowing(id: string, targetUserId: string, off
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.following", "following")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
         .andWhere((followingNotFollowersQb) => {
             // their following and not their followers
@@ -351,17 +310,17 @@ export async function getSpecificFollowing(id: string, targetUserId: string, off
                         .from(User, "sourceuser2")
                         .innerJoin("sourceuser2.followers", "follower")
                         .where("sourceuser2.id = sourceuser.id")
-                        .getQuery();
-                    return "following.id NOT IN " + subQuery;
+                        .getQuery()
+                    return "following.id NOT IN " + subQuery
                 })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getAllMutuals(id: string, offset: number, amount: number) {
@@ -370,23 +329,12 @@ export async function getAllMutuals(id: string, offset: number, amount: number) 
         .getRepository(User)
         .createQueryBuilder("user")
         .select("user.username")
-        .where((qb) => {
-            // my mutuals
-            const subQuery = qb
-                .subQuery()
-                .select("follower.id")
-                .from(User, "sourceuser")
-                .innerJoin("sourceuser.followers", "follower")
-                .innerJoin("sourceuser.following", "following", "following.id = follower.id")
-                .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id IN " + subQuery;
-        })
+        .where(getIsMutualOfQuery("user", "id", { id }))
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getAllFollowers(id: string, offset: number, amount: number) {
@@ -404,8 +352,8 @@ export async function getAllFollowers(id: string, offset: number, amount: number
                 .innerJoin("sourceuser.followers", "follower")
                 .innerJoin("sourceuser.following", "following", "following.id = follower.id")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
         .andWhere((qb) => {
             // my followers
@@ -415,14 +363,14 @@ export async function getAllFollowers(id: string, offset: number, amount: number
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.followers", "follower")
                 .where("sourceuser.id = :id2", { id2: id })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
 }
 
 export async function getAllFollowing(id: string, offset: number, amount: number) {
@@ -440,8 +388,8 @@ export async function getAllFollowing(id: string, offset: number, amount: number
                 .innerJoin("sourceuser.followers", "follower")
                 .innerJoin("sourceuser.following", "following", "following.id = follower.id")
                 .where("sourceuser.id = :id", { id })
-                .getQuery();
-            return "user.id NOT IN " + subQuery;
+                .getQuery()
+            return "user.id NOT IN " + subQuery
         })
         .andWhere((qb) => {
             // my following
@@ -451,12 +399,49 @@ export async function getAllFollowing(id: string, offset: number, amount: number
                 .from(User, "sourceuser")
                 .innerJoin("sourceuser.following", "following")
                 .where("sourceuser.id = :id2", { id2: id })
-                .getQuery();
-            return "user.id IN " + subQuery;
+                .getQuery()
+            return "user.id IN " + subQuery
         })
         .orderBy("user.createTime", "ASC")
         .skip(offset)
         .take(amount)
         .getRawMany()
-        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]));
+        .then((rawValues) => rawValues.map((rawValue) => rawValue["user_username"]))
+}
+
+export async function isMutualOf(googleId: string, otherUser: User) {
+    const queriedUser = await AppDataSource
+        .getRepository(User)
+        .createQueryBuilder("user")
+        .where("user.googleid = :googleid", { googleId })
+        .andWhere(getIsMutualOfQuery("user", "otherUserId", { otherUserId: otherUser.id }))
+        .getOne()
+    if (queriedUser) {
+        return true
+    } else {
+        return false
+    }
+}
+
+export async function isFriendOf(googleId: string, otherUser: User) {
+    const queriedUser = await AppDataSource
+        .getRepository(User)
+        .createQueryBuilder("user")
+        .where("user.googleid = :googleid", { googleId })
+        .andWhere((qb) => {
+            const subQuery = qb
+            .subQuery()
+            .select("friend.id")
+            .from(User, "sourceuser")
+            .innerJoin("sourceuser.friends", "friend")
+            .where("sourceuser.id = :otherUserId", { otherUserId: otherUser.id })
+            .getQuery()
+        return `user.id IN ${subQuery}`
+        })
+        .getOne()
+    if (queriedUser) {
+        return true
+    } else {
+        return false
+    }
 }

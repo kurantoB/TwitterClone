@@ -91,9 +91,9 @@ export default async function testDB() {
     kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
     conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
 
-    const newPost = await Persistence.postOrReply(me, "Hello, this is a short post.", VisibilityType.EVERYONE)
+    const newPost = await Persistence.postOrReply(me.googleid, "Hello, this is a short post.", VisibilityType.EVERYONE, me.googleid, null, [])
     conditionalLog("Inserted new post: " + JSON.stringify(newPost))
-    const newPostFeedActivity = await Persistence.postOrReplyHook(newPost)
+    const newPostFeedActivity = await Persistence.postOrReplyHook(newPost, null)
     conditionalLog("Inserted new post feed activity: " + JSON.stringify(newPostFeedActivity))
 
     await Persistence.likePost(kurantoNoMichi, newPost)
@@ -140,12 +140,13 @@ export default async function testDB() {
     conditionalLog("Relike done")
 
     const newReply = await Persistence.postOrReply(
-        kurantoNoMichi,
+        kurantoNoMichi.googleid,
         "This is a very long reply that should exceed the number of characters alloted to the preview. I think it's supposed to be 420, which is symbolic because Twitter started off with 140, then got extended to 280. It's only natural that we go to 420 from here. 420, you say. I know what you're thinking, but hold that thought. Wow, the 420 char limit is longer than I thought. How am I still not done? Well, in any case, I'm hopeful you peeps will make good use of all this space.",
         VisibilityType.EVERYONE,
-        [newPost.id])
+        kurantoNoMichi.googleid,
+        [newPost.id], [])
     conditionalLog("Inserted new reply: " + JSON.stringify(newReply))
-    const newReplyFeedActivity = await Persistence.postOrReplyHook(newReply, newPost)
+    const newReplyFeedActivity = await Persistence.postOrReplyHook(newReply, [newPost.id])
     conditionalLog("Inserted new reply feed activity: " + JSON.stringify(newReplyFeedActivity))
     const newReplyNotif = await Persistence.getNotification(me, NotificationType.REPLY, newReply, kurantoNoMichi)
     conditionalLog("Try get new reply notification: " + JSON.stringify(newReplyNotif))

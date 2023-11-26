@@ -1,11 +1,13 @@
-import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, PrimaryGeneratedColumn } from "typeorm"
+import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm"
 import { User } from "./User"
 import consts from "../consts"
+import { Hashtag } from "./Hashtag"
+import { PostToParentMapping } from "./PostToParentMapping"
 
 export enum VisibilityType {
-    FRIENDS,
-    MUTUALS,
-    EVERYONE
+    FRIENDS = "FRIENDS",
+    MUTUALS = "MUTUALS",
+    EVERYONE = "EVERYONE"
 }
 
 @Entity()
@@ -15,7 +17,10 @@ export class Post {
 
     @ManyToOne(
         () => User,
-        { onDelete: "CASCADE" }
+        {
+            onDelete: "CASCADE",
+            eager: true
+        }
     )
     @Index()
     author: User
@@ -42,10 +47,22 @@ export class Post {
     @JoinTable()
     reposters: User[]
 
-    @Column({
-        nullable: true
-    })
-    parentPostIds: string
+    @OneToMany(
+        () => PostToParentMapping,
+        (mapping) => mapping.post,
+        {
+            onDelete: "CASCADE",
+            eager: true
+        },
+    )
+    parentMappings: PostToParentMapping[]
+
+    @OneToMany(
+        () => PostToParentMapping,
+        (mapping) => mapping.parent,
+        { onDelete: "SET NULL" }
+    )
+    replyMappings: PostToParentMapping[]
 
     @Column({
         nullable: true
@@ -57,6 +74,19 @@ export class Post {
         enum: VisibilityType
     })
     visibility: VisibilityType
+
+    @ManyToOne(
+        () => User,
+        { eager: true }
+    )
+    visibilityPerspective: User
+
+    @ManyToMany(
+        () => Hashtag,
+        (hashtag) => hashtag.posts
+    )
+    @JoinTable()
+    hashtags: Hashtag[]
 
     @CreateDateColumn({ type: "timestamptz" })
     createTime: Date
