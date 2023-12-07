@@ -1,10 +1,18 @@
 runtime: nodejs18
+service: frontend
 
 handlers:
-- url: /
+- url: /static
+  static_dir: build/static
+
+- url: /images/(.*\.png)$
+  static_files: build/images/\1
+  upload: build/images/(.*\.png)$
+
+- url: /(.*\.(json|ico|js))$
+  static_files: build/\1
+  upload: build/.*\.(json|ico|js)$
+
+- url: .*
   static_files: build/index.html
   upload: build/index.html
-
-- url: /(.*)
-  static_files: build/\1
-  upload: build/(.*)

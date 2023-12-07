@@ -1,0 +1,9 @@
+To configure OAuth Client ID for running on localhost:
+
+Set Authorized JavaScript origins to:
+http://localhost:3000
+http://localhost
+
+Set Authorized redirect URIs to:
+http://localhost:3000
+http://localhost

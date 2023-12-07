@@ -1,9 +1,8 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import Root from './pages/Root';
-import { Provider } from 'react-redux';
+import { Provider as ReduxProvider } from 'react-redux';
 import store from './app/store';
 import Home from './pages/Home'
 import { GoogleOAuthProvider } from '@react-oauth/google'
@@ -12,7 +11,6 @@ import ViewProfile from './pages/ViewProfile';
 import RouteError from './pages/RouteError';
 import WentWrong from './components/WentWrong';
 import ViewBlockedHandles from './pages/ViewBlockedHandles';
-import { useAppSelector } from './app/hooks';
 import ViewFriends from './pages/ViewFriends';
 import NewPost from './pages/NewPost';
 
@@ -26,31 +24,31 @@ const router = createBrowserRouter([
         element: <Home />
       },
       {
-        path: "/create-account",
+        path: "create-account",
         element: <CreateOrEditAccount edit={false} />
       },
       {
-        path: "/u/:username",
+        path: "u/:username",
         element: <ViewProfile />,
       },
       {
-        path: "/friends",
+        path: "friends",
         element: <ViewFriends />
       },
       {
-        path: "/blocked",
+        path: "blocked",
         element: <ViewBlockedHandles />
       },
       {
-        path: "/edit-profile",
+        path: "edit-profile",
         element: <CreateOrEditAccount edit={true} />
       },
       {
-        path: "/new-post/:replyingto",
+        path: "new-post/:replyingto",
         element: <NewPost />
       },
       {
-        path: "/error",
+        path: "error",
         element: <WentWrong />
       }
     ],
@@ -63,10 +61,10 @@ const root = ReactDOM.createRoot(
 )
 root.render(
   // <React.StrictMode>
-  <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID ? process.env.REACT_APP_CLIENT_ID : ""}>
-    <Provider store={store}>
+  <ReduxProvider store={store}>
+    <GoogleOAuthProvider clientId={process.env.REACT_APP_CLIENT_ID ? process.env.REACT_APP_CLIENT_ID : ""}>
       <RouterProvider router={router} />
-    </Provider>
-  </GoogleOAuthProvider>
+    </GoogleOAuthProvider>
+  </ReduxProvider>
   // </React.StrictMode>
 );
