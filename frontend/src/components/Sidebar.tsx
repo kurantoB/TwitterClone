@@ -23,11 +23,11 @@ export default function Sidebar() {
                     const filePath = `${userIdBody.userId}_avatar`
                     const fileURL = `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${filePath}`
                     setAvatarUrl(fileURL)
-                }, null, undefined, "userExists", userExists)
+                })
             } else {
                 setAvatarUrl(`${window.location.origin}/images/user_icon.png`)
             }
-        }, null, undefined, "userExists", userExists)
+        })
     }, [userExists])
 
     if (!userExists) {

@@ -3,6 +3,7 @@ import { Socket } from "socket.io-client"
 
 export type AppState = {
     tokenId: string | null
+    showLogin: boolean
     userExists: boolean
     errorMessages: string[]
     headerMode: HeaderMode
@@ -20,6 +21,7 @@ export enum HeaderMode {
 
 const initialState: AppState = {
     tokenId: null,
+    showLogin: false,
     userExists: false,
     errorMessages: [],
     headerMode: HeaderMode.NONE,
@@ -32,13 +34,18 @@ const appState = createSlice({
     name: "appState",
     initialState,
     reducers: {
+        showLogin: (state) => {
+            state.showLogin = true
+        },
         login: (state, action: PayloadAction<string>) => {
             state.tokenId = action.payload
+            state.showLogin = false
         },
         findUser: (state) => {
             state.userExists = true
         },
         logout: (state) => {
+            state.showLogin = true
             state.tokenId = null
             state.userExists = false
             state.headerMode = HeaderMode.NONE
@@ -81,6 +88,7 @@ const appState = createSlice({
 
 export default appState.reducer
 export const {
+    showLogin,
     login,
     findUser,
     logout,

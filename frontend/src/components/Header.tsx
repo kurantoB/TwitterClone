@@ -1,33 +1,30 @@
 import { Link, useNavigate } from "react-router-dom"
 import { useAppSelector, useAppDispatch } from "../app/hooks"
-import { HeaderMode, addErrorMessage, findUser, login, logout } from "../app/appState"
-import { GoogleLogin, googleLogout } from '@react-oauth/google'
+import { HeaderMode, addErrorMessage } from "../app/appState"
+import { CredentialResponse, GoogleLogin } from '@react-oauth/google'
 import connectSocket from "../app/socket"
 import doAPICall from "../app/apiLayer"
+import { logoutOfSite, loginWithAccessToken, checkPersistentLogin } from "../app/loginLayer"
+import { useEffect } from "react"
 
 export default function Header() {
     const dispatch = useAppDispatch()
     const navigate = useNavigate()
 
     const token = useAppSelector((state) => state.tokenId)
+    const showLogin = useAppSelector((state) => state.showLogin)
     const userExists = useAppSelector((state) => state.userExists)
     const headerMode = useAppSelector((state) => state.headerMode)
 
-    const credentialResponse = (response: any) => {
+    const credentialResponse = (response: CredentialResponse) => {
         if (response && response.credential) {
             const accessToken = response.credential
-            dispatch(login(accessToken))
-            doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
-                dispatch(findUser())
-                // user account exists for this Google ID - connect to websocket service
-                // connectSocket(body.userId, dispatch)
-            }, null, (error, body) => {
-                if (error !== "User not found.") {
-                    dispatch(addErrorMessage(error))
-                    console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
-                    window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
-                }
-            })
+            loginWithAccessToken(accessToken, dispatch, navigate)
+
+            // user account exists for this Google ID - connect to websocket service
+            // connectSocket(body.userId, dispatch)
+        } else {
+            dispatch(addErrorMessage("Failed to get response from login request."))
         }
     }
 
@@ -47,11 +44,9 @@ export default function Header() {
         navigate("/blocked")
     }
 
-    const logoutAndNavigate = () => {
-        dispatch(logout())
-        navigate("/")
-        googleLogout()
-    }
+    useEffect(() => {
+        checkPersistentLogin(dispatch, navigate)
+    }, [])
 
     return (
         <nav className="header">
@@ -77,15 +72,17 @@ export default function Header() {
                 }}>Clear DB</button>
                 {token && !userExists && <button className="linkButton" onClick={navigateToCreateAccount}>Create Account</button>}
                 <div>
-                    {token ? <button className="linkButton" onClick={logoutAndNavigate}>Logout</button> : <GoogleLogin
-                        onSuccess={credentialResponse}
-                        onError={() => {
-                            dispatch(addErrorMessage("Error - unable to login."))
-                        }}
-                        theme="filled_black"
-                        useOneTap
-                        auto_select
-                    />}
+                    {token ? <button className="linkButton" onClick={() => logoutOfSite(dispatch, navigate)}>Logout</button> : (
+                        showLogin && <GoogleLogin
+                            onSuccess={credentialResponse}
+                            onError={() => {
+                                dispatch(addErrorMessage("Error - unable to login."))
+                            }}
+                            theme="filled_black"
+                            useOneTap
+                            auto_select
+                        />)
+                    }
                 </div>
             </div>
         </nav >

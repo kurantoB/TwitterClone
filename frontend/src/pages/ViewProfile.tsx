@@ -98,11 +98,11 @@ export default function ViewProfile() {
                     setFollowing(body.following)
                     setFollowedBy(body.followedBy)
                     setFriend(body.friend)
-                }, null, undefined, "userExists, username", [userExists, username])
+                })
 
                 doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (body) => {
                     setIsBlocking(body.isBlocking)
-                }, null, undefined, "userExists, username", [userExists, username])
+                })
             }
         }
     }
@@ -165,7 +165,7 @@ export default function ViewProfile() {
                         setIsBlockedBy(true)
                         doAPICall('GET', `/is-blocked/${profileBody.user!.id}`, dispatch, navigate, token, (isBlockedBody) => {
                             setIsBlocking(isBlockedBody.isBlocking)
-                        }, null, undefined, "userExists, username", [userExists, username])
+                        })
                     } else {
                         accessProfile(profileBody.user, profileBody.viewingOwn)
                         document.getElementById("view-profile--defaultopen")?.click()
@@ -179,11 +179,11 @@ export default function ViewProfile() {
                             setHasMoreSharedMutuals
                         )
                     }
-                }, null, undefined, "userExists, username", [userExists, username])
+                })
             }
         }, null, (error, body) => {
             navigate("/error")
-        }, "userExists, username", [userExists, username])
+        })
         window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior })
     }, [userExists, username])
 

@@ -10,4 +10,6 @@ export default {
     HANDLE_BATCH_SIZE: 5,
 
     CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars",
+
+    SESSION_TOKEN_EXPIRE_DAYS: 2
 }

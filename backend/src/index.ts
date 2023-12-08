@@ -38,44 +38,57 @@ initializePersistence().then(async () => {
 })
 
 // Middleware to verify JWT tokens
-async function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
+function verifyToken(req: express.Request, res: express.Response, next: express.NextFunction) {
     verifyTokenHelper(
         req.headers.authorization,
-        async () => {
+        // noTokenCallback
+        () => {
             res.sendStatus(401)
         },
-        async (token) => {
-            req.user = token
+        // tokenPayloadCallback
+        (tokenPayload) => {
+            req.user = tokenPayload
             next()
         },
-        (error) => {
+        // verifyError
+        (_) => {
             res.sendStatus(401)
         }
     )
 }
 
-async function verifyTokenHelper(
+function verifyTokenHelper(
     authorizationHeader: string,
-    noTokenCallback: () => Promise<void>,
-    tokenCallback: (tokenPayload: TokenPayload) => Promise<void>,
+    noTokenCallback: () => void,
+    tokenPayloadCallback: (tokenPayload: TokenPayload) => void,
     verifyError: (error: Error) => void
-): Promise<void> {
+) {
     if (authorizationHeader) {
         const token = authorizationHeader.split(' ')[1]
-        const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
-        let ticket: LoginTicket
-        try {
-            ticket = await client.verifyIdToken({
-                idToken: token,
-                audience: process.env.GOOGLE_CLIENT_ID
-            })
-        } catch (error) {
-            verifyError(error)
-        }
-        await tokenCallback(ticket.getPayload())
+        OAuth2ClientOperation(token, verifyError, tokenPayloadCallback)
     } else {
-        await noTokenCallback()
+        noTokenCallback()
     }
+}
+
+function OAuth2ClientOperation(
+    token: string,
+    verifyError: (error: Error) => void,
+    tokenPayloadCallback: (tokenPayload: TokenPayload) => void
+) {
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
+    client.verifyIdToken({
+        idToken: token,
+        audience: process.env.GOOGLE_CLIENT_ID
+    }, (err, login) => {
+        if (err) {
+            verifyError(err)
+        } else if (login) {
+            tokenPayloadCallback(login.getPayload())
+        } else {
+            verifyError(new Error("Failed to retrieve login ticket."))
+        }
+    })
 }
 
 function startServer() {
@@ -89,6 +102,27 @@ function startServer() {
         await wrapAPICall(req, res, async (_, callback) => {
             await clearDB()
             callback("OK")
+        })
+    })
+
+    app.post('/check-session', async (req, res) => {
+        await wrapAPICall(req, res, async (req, callback) => {
+            if (req.body && req.body.sessionToken) {
+                const sessionToken = req.body.sessionToken
+                OAuth2ClientOperation(
+                    sessionToken,
+                    // verifyError
+                    (_) => {
+                        res.sendStatus(401)
+                    },
+                    // tokenPayloadCallback
+                    (_) => {
+                        callback("OK")
+                    }
+                )
+            } else {
+                throw new Error("Session token not found.")
+            }
         })
     })
 
@@ -385,7 +419,7 @@ function startServer() {
         })
     })
 
-    app.post('/new-post/', verifyToken, async (req, res) => {
+    app.post('/new-post', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             const form = formidable({ multiples: false })
             form.parse(req, async (

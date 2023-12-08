@@ -1,8 +1,8 @@
 import axios, { AxiosResponse } from "axios"
 import { AnyAction, Dispatch, ThunkDispatch } from '@reduxjs/toolkit'
-import { AppState, addErrorMessage, logout } from "./appState"
+import { AppState, addErrorMessage } from "./appState"
 import { NavigateFunction } from "react-router-dom"
-import { googleLogout } from "@react-oauth/google"
+import { logoutOfSite } from "./loginLayer"
 
 type ResponseData = {
     error?: string
@@ -16,7 +16,7 @@ export default function doAPICall(
     navigate: NavigateFunction | null,
     token: string | null,
     execute: (body: any) => void,
-    formData: any = null,
+    body: any = null, // only for PATCH or POST
     errorCallback: (error: string, body: any) => void = (error, body) => {
         dispatch(addErrorMessage(error))
         console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
@@ -43,20 +43,16 @@ export default function doAPICall(
     if (method === 'GET') {
         resPromise = axiosInstance.get(route)
     } else if (method === 'POST') {
-        if (formData) {
-            resPromise = axiosInstance.post(route, formData)
+        if (body) {
+            resPromise = axiosInstance.post(route, body)
         } else {
             resPromise = axiosInstance.post(route)
         }
     } else if (method === 'PUT') {
-        if (formData) {
-            resPromise = axiosInstance.put(route, formData)
-        } else {
-            resPromise = axiosInstance.put(route)
-        }
+        resPromise = axiosInstance.put(route)
     } else if (method === 'PATCH') {
-        if (formData) {
-            resPromise = axiosInstance.patch(route, formData)
+        if (body) {
+            resPromise = axiosInstance.patch(route, body)
         } else {
             resPromise = axiosInstance.patch(route)
         }
@@ -73,17 +69,9 @@ export default function doAPICall(
                 }
             })
             .catch((error) => {
-                if (error.response) {
-                    if (error.response.status === 401) {
-                        dispatch(addErrorMessage("Request failed - unauthorized"))
-                        dispatch(logout())
-                        if (navigate) {
-                            navigate("/")
-                        }
-                        googleLogout()
-                    } else {
-                        dispatch(addErrorMessage(`Request failed - ${error.message}`))
-                    }
+                if (error.response && error.response.status === 401) {
+                    dispatch(addErrorMessage("Request failed - unauthorized"))
+                    logoutOfSite(dispatch, navigate)
                 } else {
                     dispatch(addErrorMessage(`Request failed - ${error.message}`))
                 }
