@@ -7,6 +7,7 @@ export type AppState = {
     userExists: boolean
     errorMessages: string[]
     headerMode: HeaderMode
+    stash: string | null
     websocket: any
     newNotifCount: number
     userIdToDMCount: { [userId: string]: number }
@@ -14,8 +15,6 @@ export type AppState = {
 
 export enum HeaderMode {
     CAN_EDIT_PROFILE,
-    IS_VIEWING_FOR_YOU,
-    IS_VIEWING_POPULAR,
     NONE
 }
 
@@ -25,6 +24,7 @@ const initialState: AppState = {
     userExists: false,
     errorMessages: [],
     headerMode: HeaderMode.NONE,
+    stash: null,
     websocket: null,
     newNotifCount: 0,
     userIdToDMCount: {},
@@ -82,6 +82,12 @@ const appState = createSlice({
         },
         setHeaderMode: (state, action: PayloadAction<HeaderMode>) => {
             state.headerMode = action.payload
+        },
+        stashPost: (state, action: PayloadAction<string>) => {
+            state.stash = action.payload
+        },
+        clearStash: (state) => {
+            state.stash = null
         }
     }
 })
@@ -101,4 +107,6 @@ export const {
     addErrorMessage,
     removeErrorMessage,
     setHeaderMode,
+    stashPost,
+    clearStash
 } = appState.actions

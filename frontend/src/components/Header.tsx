@@ -2,10 +2,8 @@ import { Link, useNavigate } from "react-router-dom"
 import { useAppSelector, useAppDispatch } from "../app/hooks"
 import { HeaderMode, addErrorMessage } from "../app/appState"
 import { CredentialResponse, GoogleLogin } from '@react-oauth/google'
-import connectSocket from "../app/socket"
 import doAPICall from "../app/apiLayer"
-import { logoutOfSite, loginWithAccessToken, checkPersistentLogin } from "../app/loginLayer"
-import { useEffect } from "react"
+import { logoutOfSite, loginWithAccessToken } from "../app/loginLayer"
 
 export default function Header() {
     const dispatch = useAppDispatch()
@@ -15,14 +13,12 @@ export default function Header() {
     const showLogin = useAppSelector((state) => state.showLogin)
     const userExists = useAppSelector((state) => state.userExists)
     const headerMode = useAppSelector((state) => state.headerMode)
+    const stashedPost = useAppSelector((state) => state.stash)
 
     const credentialResponse = (response: CredentialResponse) => {
         if (response && response.credential) {
             const accessToken = response.credential
             loginWithAccessToken(accessToken, dispatch, navigate)
-
-            // user account exists for this Google ID - connect to websocket service
-            // connectSocket(body.userId, dispatch)
         } else {
             dispatch(addErrorMessage("Failed to get response from login request."))
         }
@@ -44,9 +40,9 @@ export default function Header() {
         navigate("/blocked")
     }
 
-    useEffect(() => {
-        checkPersistentLogin(dispatch, navigate)
-    }, [])
+    const navigateToStashed = () => {
+        navigate(`/p/${stashedPost}`)
+    }
 
     return (
         <nav className="header">
@@ -62,6 +58,9 @@ export default function Header() {
                         <button className="linkButton" onClick={navigateToFriendList}>Your friends</button>
                         <button className="linkButton" onClick={navigateToBlockList}>Blocked handles</button>
                     </>
+                }
+                {stashedPost &&
+                    <button className="linkButton" onClick={navigateToStashed}>Stash</button>
                 }
             </div>
             <div className="header--group">

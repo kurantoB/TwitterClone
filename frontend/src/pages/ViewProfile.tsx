@@ -89,25 +89,9 @@ export default function ViewProfile() {
     const [allFollowingBatchNum, setAllFollowingBatchNum] = useState(0)
     const [hasMoreAllFollowing, setHasMoreAllFollowing] = useState(true)
 
-    const accessProfile = (user: User, viewingOwn: boolean) => {
-        if (userExists) {
-            if (viewingOwn) {
-                dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
-            } else {
-                doAPICall('GET', `/get-following-relationship/${user!.id}`, dispatch, navigate, token, (body) => {
-                    setFollowing(body.following)
-                    setFollowedBy(body.followedBy)
-                    setFriend(body.friend)
-                })
-
-                doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (body) => {
-                    setIsBlocking(body.isBlocking)
-                })
-            }
-        }
-    }
-
     useEffect(() => {
+        dispatch(setHeaderMode(HeaderMode.NONE))
+
         setFollowing(false)
         setFollowedBy(false)
         setFriend(false)
@@ -149,7 +133,6 @@ export default function ViewProfile() {
         setAllFollowingBatchNum(0)
 
         doAPICall('GET', `/get-profile/${username}`, dispatch, navigate, token, (profileBody) => {
-            dispatch(setHeaderMode(HeaderMode.NONE))
             setUser(profileBody.user)
             setViewingOwn(profileBody.viewingOwn)
             if (!profileBody.user) {
@@ -186,6 +169,24 @@ export default function ViewProfile() {
         })
         window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior })
     }, [userExists, username])
+
+    const accessProfile = (user: User, viewingOwn: boolean) => {
+        if (userExists) {
+            if (viewingOwn) {
+                dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
+            } else {
+                doAPICall('GET', `/get-following-relationship/${user!.id}`, dispatch, navigate, token, (body) => {
+                    setFollowing(body.following)
+                    setFollowedBy(body.followedBy)
+                    setFriend(body.friend)
+                })
+
+                doAPICall('GET', `/is-blocked/${user!.id}`, dispatch, navigate, token, (body) => {
+                    setIsBlocking(body.isBlocking)
+                })
+            }
+        }
+    }
 
     const handleFollow = (action: boolean) => {
         if (!user) {
@@ -399,7 +400,7 @@ export default function ViewProfile() {
         return (
             <div className="view-profile">
                 <h1>{user?.username}</h1>
-                <p>This handle's owner has you blocked. You are disallowed from interacting with them and their profile. Your posts are hidden from their feed, and likewise.</p>
+                <p>This handle's owner has blocked your ability to interact with them.</p>
                 <div>
                     {isBlocking &&
                         <div className="interactive--elem" title="Unblock handle" onClick={() => handleBlock(false)}>

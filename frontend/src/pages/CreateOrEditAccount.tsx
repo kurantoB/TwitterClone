@@ -46,6 +46,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
         }
 
         dispatch(setHeaderMode(HeaderMode.NONE))
+        
         if (edit) {
             doAPICall('GET', '/get-username', dispatch, navigate, accessToken, (usernameBody) => {
                 setUsername(usernameBody.username)

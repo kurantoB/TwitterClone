@@ -7,13 +7,15 @@ import MarkdownRenderer from './MarkdownRenderer'
 import { processTags, removeLinksFromMarkdown } from '../utils'
 import TimeAgo from 'javascript-time-ago'
 import en from 'javascript-time-ago/locale/en'
-import { addErrorMessage } from '../app/appState'
+import { addErrorMessage, clearStash, stashPost as stashPostAppState } from '../app/appState'
 
 export type DisplayedPostProps = {
     postId: string
-    viewingUserGoogleId: string | null
+    viewerUserExists: boolean
     expanded: boolean
     showFlag: boolean
+    showStashable: boolean
+    retrieveErrorCallback: (message: string) => void
 }
 
 type Post = {
@@ -43,7 +45,16 @@ type User = {
 TimeAgo.addDefaultLocale(en)
 const timeAgo = new TimeAgo('en-US')
 
-export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, showFlag }: DisplayedPostProps) {
+export default function DisplayedPost({
+    postId,
+    viewerUserExists,
+    expanded,
+    showFlag,
+    showStashable,
+    retrieveErrorCallback
+}: DisplayedPostProps) {
+    const [retrievalError, setRetrievalError] = useState<boolean>(false)
+
     const [username, setUsername] = useState<string>("")
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
     const [parentPostAuthors, setParentPostAuthors] = useState<User[]>([])
@@ -57,19 +68,22 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
     const [numReposts, setNumReposts] = useState<number>(0)
     const [liked, setLiked] = useState<boolean | null>(null)
     const [reposted, setReposted] = useState<boolean | null>(null)
+    const [stashable, setStashable] = useState<boolean>(false)
+    const [inStash, setInStash] = useState<boolean>(false)
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
     const token = useAppSelector((state) => state.tokenId)
-
-    if (!viewingUserGoogleId && showFlag) {
-        dispatch(addErrorMessage("Not logged in user should not be able to flag posts."))
-        navigate("/")
-        return
-    }
+    const stash = useAppSelector((state) => state.stash)
 
     useEffect(() => {
-        doAPICall('GET', viewingUserGoogleId ? `/get-post-logged-in/${postId}` : `/get-post-public/${postId}`, dispatch, navigate, token, (body) => {
+        if (!viewerUserExists && showFlag) {
+            dispatch(addErrorMessage("Not logged in user should not be able to flag posts."))
+            navigate("/")
+            return
+        }
+
+        doAPICall('GET', viewerUserExists ? `/get-post-logged-in/${postId}` : `/get-post-public/${postId}`, dispatch, navigate, token, (body) => {
             const post: Post = body.post
             setUsername(post.author.username)
             setAvatarUrl(post.author.avatar)
@@ -87,7 +101,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
             setNumLikes(post.numLikes)
             setNumReposts(post.numReposts)
 
-            if (viewingUserGoogleId) {
+            if (viewerUserExists) {
                 setLiked(post.liked)
                 setReposted(post.reposted)
             }
@@ -103,8 +117,23 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
                     setParentPostAuthors([...parentPostAuthors])
                 })
             }
+
+            // Double replies can only be done with posts having max visibility.
+            if (viewerUserExists && post.visibility === "EVERYONE") {
+                setStashable(true)
+                if (stash === postId) {
+                    setInStash(true)
+                }
+            }
+        }, null, (error, body) => {
+            retrieveErrorCallback(error)
+            setRetrievalError(true)
         })
     }, [])
+
+    if (retrievalError) {
+        return <></>
+    }
 
     let parentPostUsernamesStr: string | null = null
     if (parentPostAuthors.length > 0) {
@@ -126,7 +155,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
     const likeClicked = () => {
         doAPICall('PUT', liked ? `/unlike-post/${postId}` : `/like-post/${postId}`, dispatch, navigate, token, (body) => {
             if (body.success) {
-                setLiked(!liked)
+                setLiked(liked ? false : true)
             }
         })
     }
@@ -134,9 +163,17 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
     const repostClicked = () => {
         doAPICall('PUT', reposted ? `/unrepost-post/${postId}` : `/repost-post/${postId}`, dispatch, navigate, token, (body) => {
             if (body.success) {
-                setReposted(!reposted)
+                setReposted(reposted ? false : true)
             }
         })
+    }
+
+    const stashPost = () => {
+        dispatch(stashPostAppState(postId))
+    }
+
+    const unstashPost = () => {
+        dispatch(clearStash())
     }
 
     return (
@@ -204,7 +241,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
                     </div>
                     <div className="displayedpost--pane-topright">
                         {showFlag &&
-                            <div onClick={flagPost} className="displayedpost--pane-flag" title="Post flagging - report violation of terms of service">
+                            <div onClick={flagPost} className="displayedpost--pane-flag" title="Flag this post - report violation of terms of service">
                                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g><path d="M0 0h24v24H0z" /><path d="M2 3h19.138a.5.5 0 0 1 .435.748L18 10l3.573 6.252a.5.5 0 0 1-.435.748H4v5H2V3z" /></g></svg>
                             </div>
                         }
@@ -215,7 +252,20 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
                                 </div>
                             </Link>
                         }
-                        {/* TODO: Stash */}
+                        {showStashable && stashable &&
+                            <>
+                                {inStash &&
+                                    <div onClick={unstashPost} className="displayedpost--pane-unstash" title="Unstash post">
+                                        <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><rect fill="none" height="256" width="256" /><line fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" x1="96" x2="160" y1="156" y2="156" /><line fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" x1="96" x2="160" y1="116" y2="116" /><path d="M160,40h40a8,8,0,0,1,8,8V216a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V48a8,8,0,0,1,8-8H96" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" /><path d="M88,72V64a40,40,0,0,1,80,0v8Z" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" /></svg>
+                                    </div>
+                                }
+                                {!inStash &&
+                                    <div onClick={stashPost} className="displayedpost--pane-stash" title="Stash post">
+                                        <svg viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg"><rect fill="none" height="256" width="256" /><line fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" x1="96" x2="160" y1="156" y2="156" /><line fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" x1="96" x2="160" y1="116" y2="116" /><path d="M160,40h40a8,8,0,0,1,8,8V216a8,8,0,0,1-8,8H56a8,8,0,0,1-8-8V48a8,8,0,0,1,8-8H96" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" /><path d="M88,72V64a40,40,0,0,1,80,0v8Z" fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round" stroke-width="24" /></svg>
+                                    </div>
+                                }
+                            </>
+                        }
                     </div>
                 </div>
                 <hr />
@@ -241,7 +291,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
                             {numReplies}
                         </div>
                         <div className="displayedpost--pane-bottomelem">
-                            <div className="displayedpost--bottom-likesgraphic" title={viewingUserGoogleId ? (liked ? "Undo like" : "Like post") : "Likes"} onClick={viewingUserGoogleId ? likeClicked : () => { }}>
+                            <div className="displayedpost--bottom-likesgraphic" title={viewerUserExists ? (liked ? "Undo like" : "Like post") : "Likes"} onClick={viewerUserExists ? likeClicked : () => { }}>
                                 {liked &&
                                     <svg xmlns="http://www.w3.org/2000/svg"><path d="M 462.1 62.86 C 438.8 41.92 408.9 31.1 378.7 32 C 341.21 32 303.37 47.4 275.7 75.98 L 256 96.25 L 236.3 75.98 C 208.6 47.4 170.8 32 133.3 32 C 103.1 32 73.23 41.93 49.04 62.86 C -13.1 116.65 -16.21 212.56 39.81 270.46 L 233.01 470.16 C 239.4 476.7 247.6 480 255.9 480 C 264.232 480 272.59 476.733 278.91 470.196 L 472.01 270.496 C 528.2 212.5 525.1 116.6 462.1 62.86 Z" /></svg>
                                 }
@@ -252,7 +302,7 @@ export default function DisplayedPost({ postId, viewingUserGoogleId, expanded, s
                             {numLikes}
                         </div>
                         <div className="displayedpost--pane-bottomelem">
-                            <div className="displayedpost--bottom-repostsgraphic" title={viewingUserGoogleId ? (reposted ? "Undo repost" : "Repost") : "Reposts"} onClick={viewingUserGoogleId ? repostClicked : () => { }}>
+                            <div className="displayedpost--bottom-repostsgraphic" title={viewerUserExists ? (reposted ? "Undo repost" : "Repost") : "Reposts"} onClick={viewerUserExists ? repostClicked : () => { }}>
                                 {reposted &&
                                     <svg xmlns="http://www.w3.org/2000/svg"><path d="M 625.536 348.186 C 621.541 338.471 612.042 331.238 601.571 331.238 L 549.754 331.238 L 549.754 176.761 C 549.754 129.155 511 90.4 463.394 90.4 L 325.217 90.4 C 306.143 90.4 290.673 105.848 290.673 124.945 C 290.673 144.041 306.143 159.489 325.217 159.489 L 463.394 159.489 C 472.894 159.489 480.666 167.261 480.666 176.761 L 480.666 331.238 L 428.85 331.238 C 418.375 331.238 408.933 337.546 404.917 347.236 C 400.902 356.926 403.13 368.06 410.534 375.476 L 496.894 461.858 C 501.932 467.903 508.625 470.386 515.21 470.386 C 521.795 470.386 528.467 467.856 533.529 462.796 L 619.89 376.414 C 627.263 369.021 629.53 357.902 625.536 348.186 Z M 311.911 366.754 L 173.735 366.754 C 164.235 366.754 156.463 358.981 156.463 349.481 L 156.463 194.033 L 208.279 194.033 C 218.753 194.033 228.196 187.724 232.212 178.035 C 236.227 168.345 233.999 157.211 226.595 149.795 L 140.234 63.413 C 135.196 58.382 128.504 55.856 121.919 55.856 C 115.334 55.856 108.641 58.382 103.567 63.445 L 17.207 149.827 C 9.834 157.222 7.61 168.341 11.626 178.056 C 15.641 187.772 25.087 194.033 35.558 194.033 L 87.374 194.033 L 87.374 349.481 C 87.374 397.088 126.129 435.842 173.735 435.842 L 311.911 435.842 C 330.986 435.842 346.455 420.394 346.455 401.298 C 346.455 382.201 331.019 366.754 311.911 366.754 Z" /></svg>
                                 }

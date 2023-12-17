@@ -1,16 +1,23 @@
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import Header from "../components/Header";
 import { useAppSelector, useAppDispatch } from "../app/hooks";
 import Sidebar from "../components/Sidebar";
 import { removeErrorMessage } from "../app/appState";
+import { useEffect } from "react";
+import { checkPersistentLogin } from "../app/loginLayer";
 
 export default function Root() {
     const errors = useAppSelector((state) => state.errorMessages)
     const dispatch = useAppDispatch()
+    const navigate = useNavigate()
 
     const closeError = (index: number) => {
         dispatch(removeErrorMessage(index))
     }
+
+    useEffect(() => {
+        checkPersistentLogin(dispatch, navigate)
+    }, [])
 
     return (
         <>

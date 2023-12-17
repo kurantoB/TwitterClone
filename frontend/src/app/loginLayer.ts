@@ -16,6 +16,9 @@ export const loginWithAccessToken = (
 
     doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (body) => {
         dispatch(findUser())
+
+        // user account exists for this Google ID - connect to websocket service
+        // connectSocket(body.userId, dispatch)
     }, null, (error, body) => {
         // if error is "User not found." skip error handling
         if (error !== "User not found.") {

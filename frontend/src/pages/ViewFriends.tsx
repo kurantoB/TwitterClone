@@ -20,10 +20,11 @@ export default function ViewFriends() {
             return
         }
 
+        dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
+
         doAPICall('GET', '/get-friendlist', dispatch, navigate, token, (body) => {
             if (body.friendUsernames) {
                 setFriendUsernames(body.friendUsernames)
-                dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
             }
         })
     }, [])

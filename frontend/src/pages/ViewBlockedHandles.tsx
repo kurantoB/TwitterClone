@@ -12,7 +12,6 @@ export default function ViewBlockedHandles() {
     const [blockedUsernames, setBlockedUsernames] = useState<string[]>([])
 
     const dispatch = useAppDispatch()
-    const token = useAppSelector((state) => state.tokenId)
 
     useEffect(() => {
         if (!accessToken || !userExists) {
@@ -20,10 +19,11 @@ export default function ViewBlockedHandles() {
             return
         }
 
-        doAPICall('GET', '/get-blocklist', dispatch, navigate, token, (body) => {
+        dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
+
+        doAPICall('GET', '/get-blocklist', dispatch, navigate, accessToken, (body) => {
             if (body.blockedUsernames) {
                 setBlockedUsernames(body.blockedUsernames)
-                dispatch(setHeaderMode(HeaderMode.CAN_EDIT_PROFILE))
             }
         })
     }, [])

@@ -144,7 +144,7 @@ export function processTags(markdown: string): [string, string[]] {
         builder +=
             markdown.substring(cursor, occurrence[0])
             + `[${markdown.substring(occurrence[0], occurrence[1])}]`.replaceAll(/_/g, '\\_')
-            + `(${window.location.origin}/u/${encodeURIComponent(markdown.substring(occurrence[0] + 1, occurrence[1]))})`
+            + `(${window.location.origin}/u/${markdown.substring(occurrence[0] + 1, occurrence[1])})`
         cursor = occurrence[1]
     }
     builder += markdown.substring(cursor)
