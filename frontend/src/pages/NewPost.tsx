@@ -7,6 +7,7 @@ import DisplayedPost from "../components/DisplayedPost"
 import consts from "../consts"
 import MarkdownRenderer from "../components/MarkdownRenderer"
 import { processTags, removeLinksFromMarkdown } from "../utils"
+import doAPICall from "../app/apiLayer"
 
 export default function NewPost() {
     const accessToken = useAppSelector((state) => state.tokenId)
@@ -20,8 +21,10 @@ export default function NewPost() {
     const [addedFromStash, setAddedFromStash] = useState<string | null>(null)
 
     const [postContents, setPostContents] = useState<string>("")
-
     const [postContentsError, setPostContentsError] = useState<string | null>(null)
+    const [selectedFile, setSelectedFile] = useState<File | null>(null)
+    const [selectedFileError, setSelectedFileError] = useState<string | null>(null)
+    const [previewImage, setPreviewImage] = useState<string | null>(null)
 
     useEffect(() => {
         if (!accessToken || !userExists) {
@@ -30,9 +33,7 @@ export default function NewPost() {
         }
 
         dispatch(setHeaderMode(HeaderMode.NONE))
-
-
-    }, [])
+    }, [selectedFile])
 
     const addFromStash = () => {
         setAddedFromStash(stash)
@@ -60,10 +61,117 @@ export default function NewPost() {
         }
     }
 
+    const mediaClicked = () => {
+        document.getElementById('fileInput')?.click();
+    }
+
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files && event.target.files[0]
+        if (file) {
+            if (file.type === 'image/png' || file.type === 'image/jpeg') {
+                if (file.size > consts.MAX_POST_MEDIA_BYTES) {
+                    setSelectedFile(null)
+                    setPreviewImage(null)
+                    setSelectedFileError(`Media file size must not exceed ${Math.floor(consts.MAX_POST_MEDIA_BYTES / 1048576)} MB.`)
+                } else {
+                    setSelectedFileError(null)
+                    setSelectedFile(file)
+
+                    // Generate a preview image URL
+                    const reader = new FileReader()
+                    reader.onload = () => {
+                        setPreviewImage(reader.result as string)
+                    }
+                    reader.readAsDataURL(file)
+                }
+            } else {
+                setSelectedFile(null)
+                setPreviewImage(null)
+                setSelectedFileError("Media file must be in PNG or JPEG format.")
+            }
+        } else {
+            setSelectedFile(null)
+            setPreviewImage(null)
+            setSelectedFileError(null)
+        }
+    }
+
+    const handleRemoveFile = () => {
+        setSelectedFile(null)
+        setPreviewImage(null)
+        setSelectedFileError(null)
+    }
+
     const handleFormSubmit = (event: FormEvent) => {
         event.preventDefault()
 
-        {/* TODO */}
+        let hasError = false
+
+        if (postContents.length === 0 && !selectedFile) {
+            setPostContentsError("Post must have some text unless you attach an image.")
+            hasError = true
+        }
+        if (postContents.length > consts.MAX_POST_LENGTH) {
+            setPostContentsError(`Post must not exceed ${consts.MAX_POST_LENGTH} characters.`)
+            hasError = true
+        }
+
+        if (selectedFile) {
+            if (selectedFile.type !== 'image/png' && selectedFile.type !== 'image/jpeg') {
+                setSelectedFileError('Please select a valid PNG or JPEG file.')
+                hasError = true
+            } else if (selectedFile.size > consts.MAX_POST_MEDIA_BYTES) {
+                setSelectedFileError(`Media size must not exceed ${Math.floor(consts.MAX_POST_MEDIA_BYTES / 1048576)} MB.`)
+                hasError = true
+            }
+        }
+
+        if (hasError) {
+            dispatch(addErrorMessage("Unable to submit post - please fix the below issues before retrying."))
+            window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
+            return
+        }
+
+        const formData = new FormData()
+        if (selectedFile) {
+            formData.append('file', selectedFile)
+        }
+        formData.append('message', postContents)
+
+        doAPICall(
+            'POST',
+            '/new-post',
+            dispatch,
+            navigate,
+            accessToken,
+            (body) => {
+                if (body.formErrors) {
+                    for (const formError of body.formErrors) {
+                        const message = formError.split('/')[1]
+                        switch (formError.split('/')[0]) {
+                            case 'message':
+                                setPostContentsError(message)
+                                break
+                            case 'media':
+                                setSelectedFileError(message)
+                                break
+                        }
+                    }
+                    dispatch(addErrorMessage("Unable to submit post - please fix the below issues before retrying."))
+                    window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
+                } else if (body.postId) {
+                    // navigate(`/p/${body.postId}`) TODO: implement
+                    navigate("/home")
+                } else {
+                    navigate("/error")
+                }
+            },
+            {
+                visibility: "everyone", // TODO: implement
+                parentPost1: replyingto,
+                parentPost2: addedFromStash
+            }
+        )
     }
 
     return (
@@ -91,16 +199,32 @@ export default function NewPost() {
                     </div>
                     {postContentsError && <p className="new-post--error">{postContentsError}</p>}
                     <h3>Short preview</h3>
-                    <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(getPreviewSubstring(postContents)))[0]} />
+                    <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(getPreviewSubstring(postContents)))} />
                     <h3>Expanded preview</h3>
-                    <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(postContents))[0]} />
+                    <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(postContents))} />
                     <hr />
                     <div>
                         <div className="newpost--media">
-                            {/* TODO: Media */}
+                            {selectedFile &&
+                                <>
+                                    <img src={previewImage ?? ''} />
+                                    <svg onClick={handleRemoveFile} fill="none" height="24" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><rect height="18" rx="2" ry="2" width="18" x="3" y="3" /><line x1="9" x2="15" y1="9" y2="15" /><line x1="15" x2="9" y1="9" y2="15" /></svg>
+                                </>
+                            }
+                            {!selectedFile &&
+                                <svg onClick={mediaClicked} fill="none" height="24" stroke-width="1.5" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">Attach image<path d="M21 3.6V20.4C21 20.7314 20.7314 21 20.4 21H3.6C3.26863 21 3 20.7314 3 20.4V3.6C3 3.26863 3.26863 3 3.6 3H20.4C20.7314 3 21 3.26863 21 3.6Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /><path d="M3 16L10 13L21 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /><path d="M16 10C14.8954 10 14 9.10457 14 8C14 6.89543 14.8954 6 16 6C17.1046 6 18 6.89543 18 8C18 9.10457 17.1046 10 16 10Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" /></svg>
+                            }
+                            {selectedFileError && <p className="newpost--error">{selectedFileError}</p>}
                         </div>
                         <button className="largeButton">Post</button>
                     </div>
+                    <input
+                        type="file"
+                        id="fileInput"
+                        style={{ display: 'none' }}
+                        accept=".png, .jpg, .jpeg"
+                        onChange={handleFileChange}
+                    />
                 </form>
             </div>
         </div>

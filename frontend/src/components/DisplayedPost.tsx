@@ -143,7 +143,7 @@ export default function DisplayedPost({
     }
 
     const postPreviewPreprocessed = postContents ? removeLinksFromMarkdown(postContents) : null
-    const processedPostPreview = postPreviewPreprocessed ? processTags(postPreviewPreprocessed)[0] : null
+    const processedPostPreview = postPreviewPreprocessed ? processTags(postPreviewPreprocessed) : null
 
     const flagPost = () => {
         doAPICall('PUT', `/report-post/${postId}`, dispatch, navigate, token, (body) => {

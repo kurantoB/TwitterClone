@@ -6,16 +6,12 @@ export function removeLinksFromMarkdown(markdown: string) {
         .replaceAll(/<\/a[\s\n\t\r\f]*>/g, '')
 }
 
-export function processTags(markdown: string): [string, string[]] {
-    const hashtagOccurrences: number[][] = []
-    const hashtags: string[] = []
-
-    const userTagOccurrences: number[][] = []
-
+export function processTags(markdown: string) {
     // hashtags
+    const hashtagOccurrences: number[][] = []
     for (let i = 0; i < markdown.length; i++) {
         if (markdown[i] === '#' && i < markdown.length - 1) {
-            if (i > 0 && !/[\s\n\t\r\f\*_]/.test(markdown.charAt(i - 1))) {
+            if (i > 0 && !/[\s\n\t\r\f]/.test(markdown.charAt(i - 1))) {
                 // whitespace must precede hashtag
                 continue
             }
@@ -53,7 +49,6 @@ export function processTags(markdown: string): [string, string[]] {
                     // push new occurrence if not empty hashtag and is within hashtag max length
                     if (j !== startOfContent && j - startOfContent <= consts.MAX_HASHTAG_LENGTH) {
                         hashtagOccurrences.push([i, j])
-                        hashtags.push(markdown.substring(i, j).toLowerCase())
                     }
 
                     i = j
@@ -62,7 +57,6 @@ export function processTags(markdown: string): [string, string[]] {
                     // encountered end of markdown
                     if (j + 1 - startOfContent <= consts.MAX_HASHTAG_LENGTH) {
                         hashtagOccurrences.push([i, j + 1])
-                        hashtags.push(markdown.substring(i, j + 1).toLowerCase())
                     }
                     i = j
                 }
@@ -84,9 +78,10 @@ export function processTags(markdown: string): [string, string[]] {
     markdown = builder
 
     // user tags
+    const userTagOccurrences: number[][] = []
     for (let i = 0; i < markdown.length; i++) {
         if (markdown[i] === '@' && i < markdown.length - 1) {
-            if (i > 0 && !/[\s\n\t\r\f\*_]/.test(markdown.charAt(i - 1))) {
+            if (i > 0 && !/[\s\n\t\r\f]/.test(markdown.charAt(i - 1))) {
                 // whitespace must precede user tag
                 continue
             }
@@ -149,5 +144,5 @@ export function processTags(markdown: string): [string, string[]] {
     }
     builder += markdown.substring(cursor)
 
-    return [builder, hashtags]
+    return builder
 }

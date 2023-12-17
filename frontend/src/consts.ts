@@ -11,6 +11,7 @@ export default {
     MAX_POST_PREVIEW_LENGTH: 420,
     MAX_POST_PREVIEW_LINES: 6,
     MAX_POST_LENGTH: 1680,
+    MAX_POST_MEDIA_BYTES: 1048576,
 
     // misc formats
     MAX_HASHTAG_LENGTH: 25,

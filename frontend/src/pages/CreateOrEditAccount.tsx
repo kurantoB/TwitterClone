@@ -4,11 +4,11 @@ import MarkdownRenderer from "../components/MarkdownRenderer"
 import doAPICall from "../app/apiLayer"
 import { useAppDispatch, useAppSelector } from "../app/hooks"
 import { HeaderMode, addErrorMessage, findUser, logout, setHeaderMode } from "../app/appState"
-import connectSocket from "../app/socket"
 import DisplayCard from "../components/DisplayCard"
 import { useNavigate } from "react-router-dom"
 import { User } from "./ViewProfile"
 import { processTags, removeLinksFromMarkdown } from "../utils"
+import { loginWithAccessToken } from "../app/loginLayer"
 
 type CreateOrEditAccountProps = {
     edit: boolean
@@ -46,7 +46,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
         }
 
         dispatch(setHeaderMode(HeaderMode.NONE))
-        
+
         if (edit) {
             doAPICall('GET', '/get-username', dispatch, navigate, accessToken, (usernameBody) => {
                 setUsername(usernameBody.username)
@@ -69,6 +69,8 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
     const handleFormSubmit = (event: FormEvent) => {
         event.preventDefault()
 
+        let hasError = false
+
         if (!edit) {
             if (username.length < 4 || username.length > consts.MAX_USERNAME_LENGTH) {
                 setUsernameError(`Handle must be between 4 and ${consts.MAX_USERNAME_LENGTH} characters.`)
@@ -80,20 +82,24 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
         if (selectedFile) {
             if (selectedFile.type !== 'image/png' && selectedFile.type !== 'image/jpeg') {
                 setAvatarError('Please select a valid PNG or JPEG file.')
+                hasError = true
             } else if (selectedFile.size > consts.MAX_AVATAR_FILESIZE_BYTES) {
                 setAvatarError(`Avatar file size must not exceed ${Math.floor(consts.MAX_AVATAR_FILESIZE_BYTES / 1024)} KB.`)
+                hasError = true
             }
         }
 
         if (bio.length > consts.MAX_BIO_LENGTH) {
             setBioError(`Bio must not exceed ${consts.MAX_BIO_LENGTH} characters.`)
+            hasError = true
         }
 
         if (shortBio.length > consts.MAX_SHORT_BIO_LENGTH) {
             setShortBioError(`Caption must not exceed ${consts.MAX_SHORT_BIO_LENGTH} characters.`)
+            hasError = true
         }
 
-        if (usernameError || avatarError || bioError) {
+        if (hasError) {
             dispatch(addErrorMessage(`Unable to ${edit ? "update" : "create"} account - please fix the below issues before retrying.`))
             window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
             return
@@ -118,9 +124,9 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
             accessToken,
             (createOrEditAccountBody) => {
                 if (createOrEditAccountBody.formErrors) {
-                    for (const i in createOrEditAccountBody.formErrors) {
-                        const message = createOrEditAccountBody.formErrors[i].split('/')[1]
-                        switch (createOrEditAccountBody.formErrors[i].split('/')[0]) {
+                    for (const formError of createOrEditAccountBody.formErrors) {
+                        const message = formError.split('/')[1]
+                        switch (formError.split('/')[0]) {
                             case 'avatar':
                                 setAvatarError(message)
                                 break
@@ -137,11 +143,12 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                 } else {
                     doAPICall('GET', '/get-userid', dispatch, navigate, accessToken, (userIdBody) => {
                         if (!edit) {
-                            dispatch(findUser())
-                            // user account exists for this Google ID - connect to websocket service
-                            // connectSocket(userIdBody.userId, dispatch)
+                            loginWithAccessToken(accessToken!, dispatch, navigate, () => {
+                                navigate(`/u/${username}`)
+                            })
+                        } else {
+                            navigate(`/u/${username}`)
                         }
-                        navigate(`/u/${username}`)
                     })
                 }
             },
@@ -171,7 +178,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
             } else {
                 setSelectedFile(null)
                 setPreviewImage(null)
-                setAvatarError('Please select a valid PNG or JPEG file.')
+                setAvatarError("Please select a valid PNG or JPEG file.")
             }
         } else {
             setSelectedFile(null)
@@ -266,10 +273,11 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                             disabled={deleteAvatar}
                         />
                         {avatarError && <p className="create-account--error">{avatarError}</p>}
-                        {edit && editUser?.avatar && <>
+                        {edit && editUser?.avatar && <div>
                             <input type="checkbox" id="isDeleteAvatar" name="isDeleteAvatar" onChange={handleDeleteAvatarChange} checked={deleteAvatar} />
+                            &nbsp;
                             <label className="create-account--smallcaption" htmlFor="avatar">Delete avatar</label>
-                        </>}
+                        </div>}
                     </div>
                     <hr />
                     <div>
@@ -298,7 +306,7 @@ export default function CreateOrEditAccount({ edit }: CreateOrEditAccountProps) 
                         </div>
                         {bioError && <p className="create-account--error">{bioError}</p>}
                         <h3>Preview</h3>
-                        <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(bio))[0]} />
+                        <MarkdownRenderer markdownText={processTags(removeLinksFromMarkdown(bio))} />
                     </div>
                     <hr />
                     <div>

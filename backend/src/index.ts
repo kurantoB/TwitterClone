@@ -11,7 +11,7 @@ import { getSharedMutuals } from "./utils/followInfo"
 import { createOrUpdateAccount, deleteUserAccount, getUserByUsername } from "./utils/account"
 import formidable, { Files } from "formidable"
 import consts from "./consts"
-import { LoginTicket, OAuth2Client, TokenPayload } from "google-auth-library"
+import { OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
 import { deleteMedia, getUserHasAvatar, safeSearchImage } from "./utils/general"
@@ -19,8 +19,7 @@ import testDB, { clearDB, testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 import { ImageAnnotatorClient } from "@google-cloud/vision"
 import { VisibilityType } from "./entity/Post"
-import { validateHashtags } from "./utils/hashtag"
-import { User } from "./entity/User"
+import { getHashtags } from "./utils/hashtag"
 
 /*
 Responses will be in the format { body }
@@ -434,31 +433,13 @@ function startServer() {
 
                 if (fields.message[0].length === 0) {
                     if (!files.file || files.file[0].size === 0) {
-                        formErrors.push(`message/Post can't be empty.`)
+                        formErrors.push(`message/Post must have some text unless you attach an image.`)
                     }
                 } else if (fields.message[0].length > consts.MAX_POST_LENGTH) {
-                    formErrors.push(`message/Post message can not exceed ${consts.MAX_POST_LENGTH} characters.`)
+                    formErrors.push(`message/Post must not exceed ${consts.MAX_POST_LENGTH} characters.`)
                 }
 
-                let hashtags: string[] = []
-
-                let testHashtags = ""
-                const messageLines = fields.message[0].split(/\n/)
-                for (const messageLine of messageLines) {
-                    const tokenized = messageLine.split(/\s+/)
-                    for (const token of tokenized) {
-                        if (token.startsWith('#')) {
-                            testHashtags += token + ' '
-                        }
-                    }
-                }
-
-                const [hashtagFormError, capturedHashtags] = validateHashtags(testHashtags, true)
-                if (hashtagFormError) {
-                    formErrors.push(`hashtags/${hashtagFormError}`)
-                } else {
-                    hashtags = capturedHashtags
-                }
+                const hashtags = getHashtags(fields.message[0])
 
                 if (files.file && files.file[0].size > 0) {
                     const uploadedFile = files.file[0]
@@ -466,7 +447,7 @@ function startServer() {
                         formErrors.push(`media/Media file must be in PNG or JPEG format.`)
                     }
                     if (uploadedFile.size > consts.MAX_POST_MEDIA_BYTES) {
-                        formErrors.push(`media/Media file size must not exceed ${Math.floor(consts.MAX_POST_MEDIA_BYTES / 1024)} KB.`)
+                        formErrors.push(`media/Media file size must not exceed ${Math.floor(consts.MAX_POST_MEDIA_BYTES / 1048576)} MB.`)
                     }
                     // perform safe search detection on the media file
                     if (!await safeSearchImage(uploadedFile.filepath)) {
@@ -500,11 +481,18 @@ function startServer() {
                     parentPosts.push(req.body.parentPost2)
                 }
 
+                let vpgoogleid: string
+                if (parentPosts.length > 0) {
+                    vpgoogleid = (await getPostByID(parentPosts[0])).visibilityPerspective.googleid
+                } else {
+                    vpgoogleid = req.user.sub
+                }
+
                 let newPost = await postOrReply(
                     req.user.sub,
                     fields.message[0],
                     visibility,
-                    req.body.vpgoogleid,
+                    vpgoogleid,
                     parentPosts,
                     hashtags
                 )

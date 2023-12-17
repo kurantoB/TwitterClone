@@ -5,11 +5,13 @@ import doAPICall from "./apiLayer"
 import { NavigateFunction } from "react-router-dom"
 import consts from "../consts"
 import Cookies from "js-cookie"
+// import connectSocket from "./socket"
 
 export const loginWithAccessToken = (
     accessToken: string,
     dispatch: ThunkDispatch<AppState, undefined, AnyAction> & Dispatch<AnyAction>,
-    navigate: NavigateFunction
+    navigate: NavigateFunction,
+    callback: () => void = () => {}
 ) => {
     dispatch(login(accessToken))
     Cookies.set('sessionToken', accessToken, { expires: consts.SESSION_TOKEN_EXPIRE_DAYS })
@@ -19,6 +21,8 @@ export const loginWithAccessToken = (
 
         // user account exists for this Google ID - connect to websocket service
         // connectSocket(body.userId, dispatch)
+
+        callback()
     }, null, (error, body) => {
         // if error is "User not found." skip error handling
         if (error !== "User not found.") {

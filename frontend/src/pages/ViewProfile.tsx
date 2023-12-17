@@ -488,7 +488,7 @@ export default function ViewProfile() {
             }
             <hr />
             <div>
-                <MarkdownRenderer markdownText={user ? processTags(user.bio.replace('[', '\\['))[0] : ""} />
+                <MarkdownRenderer markdownText={user ? processTags(user.bio.replace('[', '\\[')) : ""} />
             </div>
             <hr />
             {
