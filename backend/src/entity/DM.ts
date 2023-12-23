@@ -1,54 +1,26 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn } from "typeorm"
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm"
 import { User } from "./User"
-import consts from "../consts"
+import { DMSession } from "./DMSession"
 
 @Entity()
 export class DM {
-    @PrimaryColumn({
-        length: 77 // uuid/uuid:xxx
-    })
+    @PrimaryGeneratedColumn('uuid')
     id: string
 
-    @Column("int")
-    ordering: number
+    @ManyToOne(() => DMSession, { onDelete: 'CASCADE' })
+    dmSession: DMSession
 
-    @ManyToOne(
-        () => User, 
-        {
-            nullable: true,
-            onDelete: "SET NULL",
-            eager: true
-        }
-    )
-    @Index()
+    @ManyToOne(() => User, {
+        nullable: true,
+        onDelete: 'SET NULL'
+    })
     sender: User
 
-    @ManyToOne(
-        () => User,
-        {
-            nullable: true,
-            onDelete: "SET NULL",
-            eager: true
-        }
-    )
-    @Index()
-    recipient: User
-
-    @Column(
-        "varchar",
-        { length: consts.MAX_DM_LENGTH }
-    )
+    @Column({ type: 'text' })
     message: string
 
-    @Column({
-        default: false
-    })
+    @Column({ default: false })
     isSeen: boolean
-
-    @Column({
-        default: false
-    })
-    isDeleted: boolean
 
     @CreateDateColumn({ type: "timestamptz" })
     createTime: Date

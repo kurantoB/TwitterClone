@@ -25,8 +25,8 @@ export class Post {
     author: User
 
     // can be null if the post is media only
-    @Column("varchar", {
-        length: consts.MAX_POST_PREVIEW_LENGTH,
+    @Column({
+        type: 'varchar',
         nullable: true
     })
     body: string
@@ -64,6 +64,7 @@ export class Post {
     replyMappings: PostToParentMapping[]
 
     @Column({
+        type: 'varchar',
         nullable: true
     })
     media: string

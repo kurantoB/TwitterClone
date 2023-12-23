@@ -8,6 +8,7 @@ import { DM } from "./entity/DM"
 import { Hashtag } from "./entity/Hashtag"
 import { TagSubscription } from "./entity/TagSubscription"
 import { PostToParentMapping } from "./entity/PostToParentMapping"
+import { DMSession } from "./entity/DMSession"
 
 export const AppDataSource = new DataSource({
     type: "postgres",
@@ -18,7 +19,7 @@ export const AppDataSource = new DataSource({
     database: "test",
     synchronize: true,
     logging: false,
-    entities: [FeedActivity, User, Post, Notification, DM, Hashtag, TagSubscription, PostToParentMapping],
+    entities: [FeedActivity, User, Post, Notification, DM, DMSession, Hashtag, TagSubscription, PostToParentMapping],
     migrations: [],
     subscribers: [],
     extra: {

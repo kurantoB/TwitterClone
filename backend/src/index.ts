@@ -32,8 +32,8 @@ configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB2()
-    await testDB()
-    // startServer()
+    // await testDB()
+    startServer()
 })
 
 // Middleware to verify JWT tokens

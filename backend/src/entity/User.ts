@@ -7,11 +7,11 @@ export class User {
     @PrimaryGeneratedColumn("uuid")
     id: string
 
-    @Column({ length: 21 })
+    @Column({ type: 'varchar' })
     @Index({ unique: true })
     googleid: string
 
-    @Column({ length: consts.MAX_USERNAME_LENGTH })
+    @Column({ type: 'varchar' })
     @Index( {unique: true })
     username: string
 
@@ -21,7 +21,7 @@ export class User {
     @Column({ type: "text" })
     bio: string
 
-    @Column({ length: consts.MAX_SHORT_BIO_LENGTH })
+    @Column({ type: 'varchar' })
     shortBio: string
 
     @ManyToMany(

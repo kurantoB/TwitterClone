@@ -70,6 +70,7 @@ export default function DisplayedPost({
     const [reposted, setReposted] = useState<boolean | null>(null)
     const [stashable, setStashable] = useState<boolean>(false)
     const [inStash, setInStash] = useState<boolean>(false)
+    let trueShowFlag = showFlag
 
     const dispatch = useDispatch()
     const navigate = useNavigate()
@@ -77,7 +78,7 @@ export default function DisplayedPost({
     const stash = useAppSelector((state) => state.stash)
 
     useEffect(() => {
-        if (!viewerUserExists && showFlag) {
+        if (!viewerUserExists && trueShowFlag) {
             dispatch(addErrorMessage("Not logged in user should not be able to flag posts."))
             navigate("/")
             return
@@ -100,6 +101,10 @@ export default function DisplayedPost({
             setNumReplies(post.numReplies)
             setNumLikes(post.numLikes)
             setNumReposts(post.numReposts)
+
+            if (post.visibility === "EVERYONE") {
+                trueShowFlag = false
+            }
 
             if (viewerUserExists) {
                 setLiked(post.liked)
@@ -240,7 +245,7 @@ export default function DisplayedPost({
                         </div>
                     </div>
                     <div className="displayedpost--pane-topright">
-                        {showFlag &&
+                        {trueShowFlag &&
                             <div onClick={flagPost} className="displayedpost--pane-flag" title="Flag this post - report violation of terms of service">
                                 <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g><path d="M0 0h24v24H0z" /><path d="M2 3h19.138a.5.5 0 0 1 .435.748L18 10l3.573 6.252a.5.5 0 0 1-.435.748H4v5H2V3z" /></g></svg>
                             </div>

@@ -6,7 +6,6 @@ export class ActionTaken {
     @PrimaryGeneratedColumn("uuid")
     id: string
 
-    @Column({ type: 'varchar' })
     @ManyToOne(
         () => User,
         {

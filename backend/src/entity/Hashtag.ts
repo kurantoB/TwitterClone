@@ -7,16 +7,11 @@ export class Hashtag {
     @PrimaryGeneratedColumn("uuid")
     id: string
 
-    @Column(
-        "varchar",
-        { length: consts.MAX_HASHTAG_LENGTH }
-    )
+    @Column({ type: 'varchar' })
     @Index({ unique: true })
     tag: string
 
-    @ManyToMany(
-        () => Post
-    )
+    @ManyToMany(() => Post)
     @JoinTable()
     posts: Post[]
 }

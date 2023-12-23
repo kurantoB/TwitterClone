@@ -9,9 +9,7 @@ export class PostToParentMapping {
     @ManyToOne(
         () => Post,
         (post) => post.parentMappings,
-        {
-            onDelete: 'CASCADE'
-        }
+        { onDelete: 'CASCADE' }
     )
     @Index()
     post: Post
@@ -22,7 +20,7 @@ export class PostToParentMapping {
         {
             onDelete: 'SET NULL',
             nullable: true
-        },
+        }
     )
     @JoinTable()
     @Index()

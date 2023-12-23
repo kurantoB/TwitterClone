@@ -11,6 +11,7 @@ import { Hashtag } from "./entity/Hashtag";
 import { PostToParentMapping } from "./entity/PostToParentMapping";
 import { isFriendOf, isMutualOf } from "./utils/followInfo";
 import { likingUsersSQB, replyMappingsSQB, repostingUsersSQB } from "./utils/post";
+import { DMSession } from "./entity/DMSession";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -63,52 +64,6 @@ export async function deleteUser(googleid: string) {
     })
 
     return result
-}
-
-export async function cleanupDeletedUserDMs(googleid: string) {
-    await doTransaction(async (em) => {
-        const senderOnlyDmIdsQB = await em
-            .getRepository(DM)
-            .createQueryBuilder('senderDm')
-            .select('senderDm.id')
-            .innerJoin('senderDm.sender', 'sender', 'sender.googleid = :googleId0', { googleId0: googleid })
-            .where((qb) => {
-                // dms where sender is user and recipient exists
-                const subQuery = qb
-                    .subQuery()
-                    .select("senderContraDm.id")
-                    .from(DM, 'senderContraDm')
-                    .innerJoin('senderContraDm.sender', 'senderContraDmSender', 'senderContraDmSender.googleid = :googleId1', { googleId1: googleid })
-                    .innerJoin('senderContraDm.recipient', 'senderContraDmRecipient')
-                    .getQuery()
-                return "senderDm.id NOT IN " + subQuery
-            })
-        const recipientOnlyDmIdsQB = await em
-            .getRepository(DM)
-            .createQueryBuilder('recipientDm')
-            .select('recipientDm.id')
-            .innerJoin('recipientDm.recipient', 'recipient', 'recipient.googleid = :googleId2', { googleId2: googleid })
-            .where((qb) => {
-                // dms where recipient is user and sender exists
-                const subQuery = qb
-                    .subQuery()
-                    .select("recipientContraDm.id")
-                    .from(DM, 'recipientContraDm')
-                    .innerJoin('recipientContraDm.recipient', 'recipientContraDmRecipient', 'recipientContraDmRecipient.googleid = :googleId3', { googleId3: googleid })
-                    .innerJoin('recipientContraDm.sender', 'recipientContraDmSender')
-                    .getQuery()
-                return "recipientDm.id NOT IN " + subQuery
-            })
-        await em
-            .getRepository(DM)
-            .createQueryBuilder('dm')
-            .delete()
-            .where('dm.id IN (' + senderOnlyDmIdsQB.getQuery() + ') OR dm.id IN (' + recipientOnlyDmIdsQB.getQuery() + ')', {
-                ...senderOnlyDmIdsQB.getParameters(),
-                ...recipientOnlyDmIdsQB.getParameters()
-            })
-            .execute()
-    })
 }
 
 export async function createOrUpdateAccountHelper(
@@ -361,7 +316,14 @@ export async function reportPost(
     post: Post,
     reporter: User
 ) {
-    let reportStatus = "Post flagged - action will be taken if it is found to violate our terms of service."
+    let reportStatus: string
+
+    if (post.visibility !== VisibilityType.EVERYONE) {
+        reportStatus = "Only posts visibile to everyone can be flagged."
+        return reportStatus
+    }
+
+    reportStatus = "Post flagged - action will be taken if it is found to violate our terms of service."
     const oneHourAgo = new Date()
     oneHourAgo.setHours(oneHourAgo.getHours() - 1)
 
@@ -749,104 +711,158 @@ export async function getBlocklist(googleid: string) {
 // DMs
 
 // message is checked for length beforehand
-export async function sendDM(dmSender: User, dmRecipient: User, message: string) {
-    return await doTransaction(async (transactionEntityManager) => {
-        let nextOrdering: number
-        let clearFormer = false
-        let clearLatter = false
+export async function sendDMAndReturnSession(dmSender: User, dmRecipient: User, message: string) {
+    let session: DMSession
+    await doTransaction(async (em) => {
+        const maybeDmSession = await em
+            .getRepository(DMSession)
+            .createQueryBuilder('session')
+            .where((qb) => {
+                const subQuery = qb
+                    .subQuery()
+                    .select("subSession.id")
+                    .from(DMSession, 'subSession')
+                    .innerJoin('subSession.participant1', 'participant1', 'participant1.id = :senderId', { senderId: dmSender.id })
+                    .innerJoin('subSession.participant2', 'participant2', 'participant2.id = :recipientId', { recipientId: dmRecipient.id })
+                    .getQuery()
+                return "session.id = " + subQuery
+            })
+            .orWhere((qb) => {
+                const subQuery = qb
+                    .subQuery()
+                    .select("subSession1.id")
+                    .from(DMSession, 'subSession1')
+                    .innerJoin('subSession1.participant1', 'participant1_1', 'participant1_1.id = :recipientId', { recipientId: dmRecipient.id })
+                    .innerJoin('subSession1.participant2', 'participant2_1', 'participant2_1.id = :senderId', { senderId: dmSender.id })
+                    .getQuery()
+                return "session.id = " + subQuery
+            })
+            .getOne()
 
-        let largest
-        const largestOrderingDM = await transactionEntityManager.findOne(DM, {
-            where: [
-                { sender: { id: dmSender.id } },
-                { recipient: { id: dmSender.id } }
-            ],
-            order: {
-                ordering: "DESC"
-            }
-        })
-        if (largestOrderingDM) {
-            largest = largestOrderingDM.ordering
-            if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 1) {
-
-                largest = await transactionEntityManager
-                    .getRepository(DM)
-                    .createQueryBuilder("dm")
-                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                    .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                    .orderBy("dm.ordering", "DESC")
-                    .getOne()
-                    .then((dm) => dm?.ordering)
-                if (largest === undefined) {
-                    nextOrdering = 0
-                } else {
-                    nextOrdering = largest + 1
-                    if (largest === consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
-                        clearLatter = true
-                    }
-                }
-            } else {
-                nextOrdering = largest + 1
-                if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
-                    clearFormer = true
-                }
-            }
-
-            if (clearFormer) {
-                const deleteDmIDs = await transactionEntityManager
-                    .getRepository(DM)
-                    .createQueryBuilder("dm")
-                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                    .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                    .getMany()
-                    .then((dms) => dms.map((dm) => dm.id))
-                await transactionEntityManager.delete(DM, deleteDmIDs)
-            } else if (clearLatter) {
-                const deleteDmIDs = await transactionEntityManager
-                    .getRepository(DM)
-                    .createQueryBuilder("dm")
-                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                    .andWhere("dm.ordering >= :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                    .getMany()
-                    .then((dms) => dms.map((dm) => dm.id))
-                await transactionEntityManager.delete(DM, deleteDmIDs)
-            }
+        if (maybeDmSession) {
+            session = maybeDmSession
         } else {
-            nextOrdering = 0
+            const newSession = new DMSession()
+            newSession.participant1 = dmSender
+            newSession.participant2 = dmRecipient
+            session = await em.getRepository(DMSession).save(newSession)
         }
-
-        const dm = new DM()
-        dm.id = dmSender.id + "/" + dmRecipient.id + ":" + nextOrdering
-        dm.ordering = nextOrdering
-        dm.sender = dmSender
-        dm.recipient = dmRecipient
-        dm.message = message
-        return await transactionEntityManager.save(dm)
     })
+
+    if (!session) {
+        throw new Error("Unable to assign DM session")
+    }
+
+    const dm = new DM()
+    dm.dmSession = session
+    dm.sender = dmSender
+    dm.message = message
+    await AppDataSource.getRepository(DM).save(dm)
+
+    return session
 }
 
-export async function getOneOnOneDMs(user1ID: string, user2ID: string) {
+export async function processSessionPostDM(dmSession: DMSession) {
+    const dmQueryBuilder = AppDataSource
+        .getRepository(DM)
+        .createQueryBuilder('dm')
+        .innerJoin('dm.dmSession', 'session', 'session.id = :sessionId', { sessionId: dmSession.id })
+
+    const count = await dmQueryBuilder.getCount()
+
+    if (count > consts.NUMBER_OF_RETRIEVABLE_DM_S) {
+        const earliests = await dmQueryBuilder
+            .orderBy('dm.createTime', 'ASC')
+            .take(count - consts.NUMBER_OF_RETRIEVABLE_DM_S)
+            .getMany()
+        await AppDataSource.getRepository(DM).remove(earliests)
+    }
+
+    const lastUpdate = await dmQueryBuilder
+        .orderBy('dm.createTime', 'DESC')
+        .getOne()
+        .then((dm) => dm.createTime)
+    
+    dmSession.lastUpdate = lastUpdate
+    await AppDataSource.getRepository(DMSession).save(dmSession)
+}
+
+export async function getUserDMSessions(user: User) {
+    return await AppDataSource
+        .getRepository(DMSession)
+        .createQueryBuilder('session')
+        .leftJoin('session.participant1', 'participant1')
+        .leftJoin('session.participant2', 'participant2')
+        .where('participant1.id = :userId OR participant2.id = :userId', { userId: user.id })
+        .getMany()
+}
+
+export async function getOneOnOneDMs(dmSession: DMSession) {
     return await AppDataSource
         .getRepository(DM)
-        .createQueryBuilder("dm")
-        .leftJoinAndSelect("dm.sender", "sender")
-        .leftJoinAndSelect("dm.recipient", "recipient")
-        .where("dm.id like :queryID1", { queryID1: `%${user1ID}%` })
-        .andWhere("dm.id like :queryID2", { queryID2: `%${user2ID}%` })
+        .createQueryBuilder('dm')
+        .innerJoin('dm.dmSession', 'session', 'session.id = :sessionId', { sessionId: dmSession.id })
+        .leftJoinAndSelect('dm.sender', 'sender')
+        .orderBy('dm.createTime', 'DESC')
         .getMany()
 }
 
 export async function deleteDM(dm: DM) {
     await AppDataSource.getRepository(DM).update(
         { id: dm.id },
-        {
-            isDeleted: true,
-            message: "[Deleted message]"
-        }
+        { message: "[Deleted message]" }
     )
+}
+
+export async function cleanupDeletedUserDMs(googleid: string) {
+    const sessionsToDelete = await AppDataSource
+        .getRepository(DMSession)
+        .createQueryBuilder('session')
+        .where((qb) => {
+            // user is session's participant1
+            const subQuery = qb
+                .subQuery()
+                .select('p1Session.id')
+                .from(DMSession, 'p1Session')
+                .innerJoin('p1Session.participant1', 'participant1', 'participant1.googleid = :googleid', { googleid })
+                .where((qb1) => {
+                    // p1session has no participant2
+                    const subQuery = qb1
+                        .subQuery()
+                        .select('subP1Session.id')
+                        .from(DMSession, 'subP1Session')
+                        .innerJoin('subP1Session.participant1', 'subParticipant1', 'subParticipant1.googleid = :googleid', { googleid })
+                        .innerJoin('subP1Session.participant2', 'subParticipant2')
+                        .getQuery()
+                    return 'p1Session.id NOT IN ' + subQuery
+                })
+                .getQuery()
+            return 'session.id IN ' + subQuery
+        })
+        .orWhere((qb) => {
+            // user is session's participant2
+            const subQuery = qb
+                .subQuery()
+                .select('p2Session.id')
+                .from(DMSession, 'p2Session')
+                .innerJoin('p2Session.participant2', 'participant2', 'participant2.googleid = :googleid', { googleid })
+                .where((qb1) => {
+                    // p2session has no participant1
+                    const subQuery = qb1
+                        .subQuery()
+                        .select('subP2Session.id')
+                        .from(DMSession, 'subP2Session')
+                        .innerJoin('subP2Session.participant2', 'subParticipant2', 'subParticipant2.googleid = :googleid', { googleid })
+                        .innerJoin('subP2Session.participant1', 'subParticipant1')
+                        .getQuery()
+                    return 'p2Session.id NOT IN ' + subQuery
+                })
+                .getQuery()
+            return 'session.id IN ' + subQuery
+        })
+        .getMany()
+
+    await AppDataSource.getRepository(DMSession).remove(sessionsToDelete)
 }
 
 
@@ -1085,6 +1101,34 @@ export async function getAllGoogleIDsForDeletionDEBUGONLY() {
         .getRepository(User)
         .find()
         .then((users) => users.map((user) => user.googleid))
+}
+
+export async function getLatestDMFromSessionDEBUGONLY(dmSession: DMSession) {
+    return await AppDataSource
+        .getRepository(DM)
+        .createQueryBuilder('dm')
+        .innerJoin('dm.dmSession', 'session', 'session.id = :sessionId', { sessionId: dmSession.id })
+        .orderBy('dm.createTime', 'DESC')
+        .getOne()
+}
+
+export async function getAllDMSessionsDEBUGONLY() {
+    return await AppDataSource.getRepository(DMSession).find({
+        relations: {
+            participant1: true,
+            participant2: true
+        }
+    })
+}
+
+export async function getCompleteDMSessionDEBUGONLY(dmSession: DMSession) {
+    return await AppDataSource.getRepository(DMSession).findOne({
+        where: { id : dmSession.id },
+        relations: {
+            participant1: true,
+            participant2: true
+        }
+    })
 }
 
 export async function clearDMsDEBUGONLY() {

@@ -52,9 +52,7 @@ export class Notification {
     )
     sourceUser: User
 
-    @Column({
-        default: false
-    })
+    @Column({ default: false })
     isSeen: boolean
 
     @CreateDateColumn({ type: "timestamptz" })
