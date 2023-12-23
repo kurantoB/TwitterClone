@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryColumn } from "typeorm"
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn } from "typeorm"
 import { User } from "./User"
 import { Post } from "./Post"
 
@@ -10,7 +10,9 @@ export enum FeedActivityType {
 
 @Entity()
 export class FeedActivity {
-    @PrimaryColumn({ type: 'varchar' })
+    @PrimaryGeneratedColumn("uuid")
+    id: string
+
     @ManyToOne(
         () => User,
         {
@@ -18,9 +20,9 @@ export class FeedActivity {
             eager: true
         }
     )
+    @Index()
     sourceUser: User
 
-    @PrimaryColumn({ type: 'varchar' })
     @ManyToOne(
         () => Post,
         {
@@ -30,15 +32,17 @@ export class FeedActivity {
     )
     sourcePost: Post
 
-    @PrimaryColumn({
+    @Column({
         type: "enum",
         enum: FeedActivityType
     })
     type: FeedActivityType
 
     @CreateDateColumn({ type: "timestamptz" })
+    @Index()
     createTime: Date
 
     @Column({ type: "timestamptz" })
+    @Index()
     expiryDate: Date
 }

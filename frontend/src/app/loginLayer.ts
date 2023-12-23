@@ -1,6 +1,6 @@
 import { googleLogout } from "@react-oauth/google"
 import { AnyAction, Dispatch, ThunkDispatch } from "@reduxjs/toolkit"
-import { AppState, addErrorMessage, findUser, login, logout, showLogin } from "./appState"
+import { AppState, addErrorMessage, findUser, login, logout, missUser } from "./appState"
 import doAPICall from "./apiLayer"
 import { NavigateFunction } from "react-router-dom"
 import consts from "../consts"
@@ -11,7 +11,7 @@ export const loginWithAccessToken = (
     accessToken: string,
     dispatch: ThunkDispatch<AppState, undefined, AnyAction> & Dispatch<AnyAction>,
     navigate: NavigateFunction,
-    callback: () => void = () => {}
+    callback: () => void = () => { }
 ) => {
     dispatch(login(accessToken))
     Cookies.set('sessionToken', accessToken, { expires: consts.SESSION_TOKEN_EXPIRE_DAYS })
@@ -24,8 +24,9 @@ export const loginWithAccessToken = (
 
         callback()
     }, null, (error, body) => {
-        // if error is "User not found." skip error handling
-        if (error !== "User not found.") {
+        if (error === "User not found.") {
+            dispatch(missUser())
+        } else {
             dispatch(addErrorMessage(error))
             console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
             window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
@@ -56,8 +57,14 @@ export const checkPersistentLogin = (
         doAPICall('POST', '/check-session', dispatch, navigate, null, (body) => {
             // auto login
             loginWithAccessToken(sessionToken, dispatch, navigate)
-        }, { sessionToken })
+        }, { sessionToken }, (error, body) => {
+            dispatch(addErrorMessage(error))
+            console.log(`API error: error = ${error}, body = ${JSON.stringify(body)}`)
+            window.scrollTo({ top: 0, behavior: 'smooth' as ScrollBehavior })
+
+            logoutOfSite(dispatch, navigate)
+        })
     } else {
-        dispatch(showLogin())
+        dispatch(missUser())
     }
 }

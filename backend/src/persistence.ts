@@ -1,4 +1,4 @@
-import { EntityManager, In, IsNull, MoreThan } from "typeorm";
+import { EntityManager, FindOptionsWhere, In, IsNull, MoreThan } from "typeorm";
 import consts from "./consts";
 import { DM } from "./entity/DM";
 import { FeedActivity, FeedActivityType } from "./entity/FeedActivity";
@@ -7,8 +7,6 @@ import { Post, VisibilityType } from "./entity/Post";
 import { User } from "./entity/User";
 import { AppDataSource } from "./data-source";
 import { PostReport } from "./entity/PostReport";
-import { ActionTaken } from "./entity/ActionTaken";
-import { deleteMedia, storeMedia } from "./utils/general";
 import { Hashtag } from "./entity/Hashtag";
 import { PostToParentMapping } from "./entity/PostToParentMapping";
 import { isFriendOf, isMutualOf } from "./utils/followInfo";
@@ -34,45 +32,83 @@ export async function getUserByUsername(username: string) {
         .findOneBy({ username })
 }
 
+export type DeleteUserResult = {
+    avatarFilename: string
+    mediaPostIds: string[]
+}
 export async function deleteUser(googleid: string) {
-    const user = await AppDataSource
-        .getRepository(User)
-        .findOne({
-            relations: {
-                followers: true,
-                following: true
-            },
-            where: { googleid }
-        })
-
-    for (const follower of user.followers) {
-        await unfollow(follower.googleid, user.id)
-    }
-    for (const followed of user.following) {
-        await unfollow(user.googleid, followed.id)
+    const result: DeleteUserResult = {
+        avatarFilename: undefined,
+        mediaPostIds: undefined
     }
 
-    const dmsToDelete = await AppDataSource.getRepository(DM).find({
-        where: [
-            {
-                sender: { id: user.id },
-                recipient: IsNull()
-            },
-            {
-                sender: IsNull(),
-                recipient: { id: user.id }
-            }
-        ]
+    await doTransaction(async (em) => {
+        const user = await em
+            .getRepository(User)
+            .findOneBy({ googleid })
+
+        result.avatarFilename = user.avatar
+
+        // decrement related users' followerCount, followingCount, mutualCount
+
+        result.mediaPostIds = await em.getRepository(Post)
+            .createQueryBuilder('post')
+            .select("post.id")
+            .where("post.author = :userId", { userId: user.id })
+            .andWhere("post.media IS NOT NULL")
+            .getMany()
+            .then((posts) => posts.map((post) => post.id))
+
+        await AppDataSource.getRepository(User).remove(user)
     })
-    await AppDataSource.getRepository(DM).remove(dmsToDelete)
 
-    const posts = await AppDataSource.getRepository(Post).findBy({ author: user })
-    for (const post of posts) {
-        if (post.media) {
-            await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, post.id + "_media")
-        }
-    }
-    return await AppDataSource.getRepository(User).remove(user)
+    return result
+}
+
+export async function cleanupDeletedUserDMs(googleid: string) {
+    await doTransaction(async (em) => {
+        const senderOnlyDmIdsQB = await em
+            .getRepository(DM)
+            .createQueryBuilder('senderDm')
+            .select('senderDm.id')
+            .innerJoin('senderDm.sender', 'sender', 'sender.googleid = :googleId0', { googleId0: googleid })
+            .where((qb) => {
+                // dms where sender is user and recipient exists
+                const subQuery = qb
+                    .subQuery()
+                    .select("senderContraDm.id")
+                    .from(DM, 'senderContraDm')
+                    .innerJoin('senderContraDm.sender', 'senderContraDmSender', 'senderContraDmSender.googleid = :googleId1', { googleId1: googleid })
+                    .innerJoin('senderContraDm.recipient', 'senderContraDmRecipient')
+                    .getQuery()
+                return "senderDm.id NOT IN " + subQuery
+            })
+        const recipientOnlyDmIdsQB = await em
+            .getRepository(DM)
+            .createQueryBuilder('recipientDm')
+            .select('recipientDm.id')
+            .innerJoin('recipientDm.recipient', 'recipient', 'recipient.googleid = :googleId2', { googleId2: googleid })
+            .where((qb) => {
+                // dms where recipient is user and sender exists
+                const subQuery = qb
+                    .subQuery()
+                    .select("recipientContraDm.id")
+                    .from(DM, 'recipientContraDm')
+                    .innerJoin('recipientContraDm.recipient', 'recipientContraDmRecipient', 'recipientContraDmRecipient.googleid = :googleId3', { googleId3: googleid })
+                    .innerJoin('recipientContraDm.sender', 'recipientContraDmSender')
+                    .getQuery()
+                return "recipientDm.id NOT IN " + subQuery
+            })
+        await em
+            .getRepository(DM)
+            .createQueryBuilder('dm')
+            .delete()
+            .where('dm.id IN (' + senderOnlyDmIdsQB.getQuery() + ') OR dm.id IN (' + recipientOnlyDmIdsQB.getQuery() + ')', {
+                ...senderOnlyDmIdsQB.getParameters(),
+                ...recipientOnlyDmIdsQB.getParameters()
+            })
+            .execute()
+    })
 }
 
 export async function createOrUpdateAccountHelper(
@@ -81,31 +117,37 @@ export async function createOrUpdateAccountHelper(
     username: string,
     bio: string,
     shortBio: string,
+    hasAvatarUpload: boolean
 ) {
-    await doTransaction(async (em: EntityManager) => {
-        let user: User
-        if (userId) {
-            user = await em.findOneBy(User, { id: userId })
-        } else {
+    let user: User
+    if (userId) {
+        // already exists
+        user = await AppDataSource.getRepository(User).findOneBy({ id: userId })
+    } else {
+        await doTransaction(async (em: EntityManager) => {
             const userLimitExceeded = await em.count(User) === consts.MAX_USERS
             if (userLimitExceeded) {
                 throw new Error("User limit exceeded.")
             }
             user = new User()
             user.googleid = googleid
-            const alreadyExists = await em.find(User, {
-                where: { username }
-            }).then((users) => users.length > 0)
-            if (alreadyExists) {
+            if (await em.exists(User, { where: { username } })) {
                 throw new Error(`username/Unable to set username: ${username} is already taken.`)
             } else {
                 user.username = username
             }
-        }
-        user.bio = bio
-        user.shortBio = shortBio
-        await em.save(User, user)
-    })
+        })
+    }
+
+    user.bio = bio
+    user.shortBio = shortBio
+
+    user = await AppDataSource.getRepository(User).save(user)
+
+    if (hasAvatarUpload) {
+        user.avatar = user.id + '_avatar'
+        await AppDataSource.getRepository(User).save(user)
+    }
 }
 
 export async function deleteAndGetUserAvatar(userId: string) {
@@ -119,31 +161,25 @@ export async function deleteAndGetUserAvatar(userId: string) {
     })
 }
 
-export function updateUserAvatar(userId: string, avatarFilename: string) {
-    return AppDataSource.getRepository(User).findOneBy({
-        id: userId
-    }).then(async (user) => {
-        user.avatar = avatarFilename
-        return await AppDataSource.getRepository(User).save(user)
-    })
-}
-
 export async function getUserAvatar(googleid: string) {
     return AppDataSource.getRepository(User).findOneBy({
         googleid
     }).then((user) => user.avatar)
 }
 
+
+
 // posts
 
 export async function postOrReply(
     googleid: string,
     message: string,
+    hasAttachedMedia: boolean,
     visibility: VisibilityType,
     visibilityPerspectiveGoogleId: string,
     parentPostIds: string[], // nullable
     hashtags: string[]
-) {
+): Promise<Post> {
     const userPostCount = await AppDataSource.getRepository(Post).count({
         where: { author: { googleid } }
     })
@@ -153,69 +189,66 @@ export async function postOrReply(
 
     let newPost: Post
 
+    newPost = new Post()
+    const user = await getUserByGoogleID(googleid)
+    newPost.author = user
+
+    const [previewSubstring, extensionSubstring] = getPreviewSubstring(message)
+    newPost.body = previewSubstring
+    newPost.extension = extensionSubstring
+
+    newPost.visibility = visibility
+    newPost.visibilityPerspective = await getUserByGoogleID(visibilityPerspectiveGoogleId)
+
+    if (hasAttachedMedia) {
+        newPost.media = newPost.id + '_media'
+    }
+
+    newPost = await AppDataSource.getRepository(Post).save(newPost)
+
     await doTransaction(async (em) => {
-        newPost = new Post()
-        const user = await getUserByGoogleID(googleid)
-        newPost.author = user
+        const newTags: Hashtag[] = []
+        const affectedExistingTags: Hashtag[] = []
 
-        if (message.length > consts.MAX_POST_LENGTH) {
-            throw new Error("Post is too long.")
-        }
-
-        const [previewSubstring, extensionSubstring] = getPreviewSubstring(message)
-        newPost.body = previewSubstring
-        newPost.extension = extensionSubstring
-
-        newPost.visibility = visibility
-        newPost.visibilityPerspective = await getUserByGoogleID(visibilityPerspectiveGoogleId)
-        newPost.hashtags = []
-
-        const affectedTags: Hashtag[] = []
         for (const tagString of hashtags) {
+            // build a list of live hashtags
+
             const tag = await em.getRepository(Hashtag).findOne({
-                relations: { posts: true },
                 where: { tag: tagString }
             })
             if (!tag) {
-                let newTag = new Hashtag()
+                const newTag = new Hashtag()
                 newTag.tag = tagString
-                newTag.posts = []
-                newTag = await em.getRepository(Hashtag).save(newTag)
-                newPost.hashtags.push(newTag)
-                const reloadedNewTag = await em.getRepository(Hashtag).findOne({
-                    relations: { posts: true },
-                    where: { id: newTag.id }
-                })
-                affectedTags.push(reloadedNewTag)
+                newTag.posts = [newPost]
+                newTags.push(newTag)
             } else {
-                affectedTags.push(tag)
+                affectedExistingTags.push(tag)
             }
         }
 
-        newPost = await em.getRepository(Post).save(newPost)
+        await em.getRepository(Hashtag).save(newTags)
 
-        if (parentPostIds) {
-            for (const parentPostId of parentPostIds) {
-                const newMapping = new PostToParentMapping()
-                newMapping.post = newPost
-                newMapping.parent = await getPostByID(parentPostId)
-                await em.getRepository(PostToParentMapping).save(newMapping)
+        if (affectedExistingTags.length > 0) {
+            for (const existingTag of affectedExistingTags) {
+                await em
+                    .createQueryBuilder()
+                    .relation(Hashtag, 'posts')
+                    .of(existingTag.id)
+                    .add(newPost.id)
             }
-        }
-
-        if (affectedTags.length > 0) {
-            const reloadedNewPost = await em.getRepository(Post).findOne({
-                relations: { hashtags: true },
-                where: { id: newPost.id }
-            })
-            for (const tag of affectedTags) {
-                tag.posts.push(reloadedNewPost)
-                reloadedNewPost.hashtags.push(tag)
-                await em.getRepository(Hashtag).save(tag)
-            }
-            newPost = await em.getRepository(Post).save(reloadedNewPost)
         }
     })
+
+    if (parentPostIds) {
+        const parentPostMappings = []
+        for (const parentPostId of parentPostIds) {
+            const newMapping = new PostToParentMapping()
+            newMapping.post = newPost
+            newMapping.parent = await getPostByID(parentPostId)
+            parentPostMappings.push(newMapping)
+        }
+        await AppDataSource.getRepository(PostToParentMapping).save(parentPostMappings)
+    }
 
     return newPost
 }
@@ -238,7 +271,9 @@ function getPreviewSubstring(message: string) {
             }
         }
     }
-    return [message.substring(0, extensionStartIndex), extensionStartIndex === -1 ? null : message.substring(extensionStartIndex)]
+    return [
+        extensionStartIndex === -1 ? message : message.substring(0, extensionStartIndex),
+        extensionStartIndex === -1 ? null : message.substring(extensionStartIndex)]
 }
 
 export async function postOrReplyHook(
@@ -256,47 +291,36 @@ export async function postOrReplyHook(
             )
         }
     }
-    return await makeFeedActivity(
+    await makeFeedActivity(
         newPost.author,
         newPost,
         FeedActivityType.POST
     )
 }
 
-export async function attachPostMedia(post: Post, filepath: string) {
-    const mediaPath = post.id + "_media"
-    await storeMedia(
-        consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME,
-        filepath,
-        mediaPath
-    )
-    post.media = mediaPath
-    return await AppDataSource.getRepository(Post).save(post)
-}
-
 // make sure the media is cleared from storage first
 export async function deletePost(post: Post) {
-    return await AppDataSource.getRepository(Post).remove(post)
+    await AppDataSource.getRepository(Post).remove(post)
 }
 
 
 
 // post viewing
 
-export async function getParentPostsByMappingIds(ids: string[]) {
-    return await AppDataSource.getRepository(Post)
-        .createQueryBuilder("post")
-        .where((qb) => {
-            const subQuery = qb
-                .subQuery()
-                .select("parentpost.id")
-                .from(PostToParentMapping, "mapping")
-                .innerJoin("mapping.parent", "parentpost")
-                .where("mapping.id IN (:...ids)", { ids })
-                .getQuery()
-            return "post.id IN " + subQuery
-        })
-        .getMany()
+export async function getParentPostPromisesByMappingIds(ids: string[]) {
+    return ids.map(async (mappingId) => {
+        const maybeMapping: PostToParentMapping = await AppDataSource
+            .getRepository(PostToParentMapping)
+            .createQueryBuilder('mapping')
+            .innerJoinAndSelect('mapping.parent', 'parent')
+            .where('mapping.id = :mappingId', { mappingId })
+            .getOne()
+        if (maybeMapping) {
+            return await AppDataSource.getRepository(Post).findOneBy({ id: maybeMapping.parent.id })
+        } else {
+            return null
+        }
+    })
 }
 
 export async function getIsPostVisible(viewerGoogleId: string, post: Post) {
@@ -380,43 +404,8 @@ export async function reportPost(
     return reportStatus
 }
 
-export async function takeActionOnReport(report: PostReport) {
-    if (report.post.media) {
-        await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, report.post.id + "_media")
-    }
-    await deletePost(report.post)
-
-    const currentTimeInMilliseconds = new Date().getTime()
-    const newTimeInMilliseconds = currentTimeInMilliseconds - (86400000 * consts.ACCOUNT_TOLERANCE_DURATION_DAYS)
-    const newDate = new Date(newTimeInMilliseconds)
-    const actionsTaken = await AppDataSource.getRepository(ActionTaken).countBy({
-        targetUser: report.reportee,
-        actionTime: MoreThan(newDate)
-    })
-    if (actionsTaken >= consts.ACCOUNT_TOLERANCE_QUANTITY) {
-        // delete account if tolerance level is exceeded
-        if (report.reportee.avatar) {
-            try {
-                await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, report.reportee.avatar)
-            } catch (error) {
-                // TODO: report cloud storage errors
-                console.log(`Cloud storage error: ${error.message}`)
-            }
-        }
-        await deleteUser(report.reportee.googleid)
-    } else {
-        const actionTaken = new ActionTaken()
-        actionTaken.targetUser = report.reportee
-        const expiryDate = new Date()
-        expiryDate.setDate(expiryDate.getDate() + consts.ACTION_TAKEN_EXPIRY_DAYS)
-        actionTaken.expiryDate = expiryDate
-        await AppDataSource.getRepository(ActionTaken).save(actionTaken)
-    }
-    await AppDataSource.getRepository(PostReport).remove(report)
-}
-
 export async function takeActionOnReportHook(report: PostReport) {
-    makeNotification(report.reportee, NotificationType.ACTION_TAKEN, null, null)
+    await makeNotification(report.reportee, NotificationType.ACTION_TAKEN, null, null)
 }
 
 export async function dismissReport(report: PostReport) {
@@ -427,16 +416,16 @@ export async function dismissReport(report: PostReport) {
 
 // likes
 
-export async function likePost(user: User, post: Post) {
-    return await handleLikePost(user, post, true)
+export async function likePost(userId: string, postId: string) {
+    await handleLikePost(userId, postId, true)
 }
 
-export async function unlikePost(user: User, post: Post) {
-    return await handleLikePost(user, post, false)
+export async function unlikePost(userId: string, postId: string) {
+    await handleLikePost(userId, postId, false)
 }
 
 export async function likePostHook(user: User, post: Post, action: boolean) {
-    try {
+    if (user.id !== post.author.id) {
         await makeNotification(
             post.author,
             NotificationType.LIKE,
@@ -444,10 +433,6 @@ export async function likePostHook(user: User, post: Post, action: boolean) {
             user,
             action
         )
-    }
-    catch (error) {
-        console.log("like post hook make notification error")
-        // do nothing
     }
     return await makeFeedActivity(
         user,
@@ -457,58 +442,53 @@ export async function likePostHook(user: User, post: Post, action: boolean) {
     )
 }
 
-async function handleLikePost(user: User, { id }: Post, action: boolean) {
-    const loadedPost = await AppDataSource.getRepository(Post).findOne({
-        relations: {
-            likedBy: true
-        },
-        where: { id }
-    })
-    if (action) {
-        if (loadedPost.likedBy.filter((checkUser) => checkUser.id === user.id).length === 0) {
-            loadedPost.likedBy.push(user)
-        }
-    } else {
-        loadedPost.likedBy = loadedPost.likedBy.filter((checkUser) => checkUser.id !== user.id)
-    }
-    return await AppDataSource.getRepository(Post).save(loadedPost)
-}
+async function handleLikePost(userId: string, postId: string, action: boolean) {
+    await doTransaction(async (em) => {
+        const exists = await em
+            .getRepository(Post)
+            .createQueryBuilder('post')
+            .innerJoinAndSelect('post.likedBy', 'likingUser')
+            .where('post.id = :postId', { postId })
+            .andWhere('likingUser.id = :userId', { userId })
+            .getExists()
 
-export async function getPostLikes(post: Post) {
-    return AppDataSource.getRepository(Post).findOne({
-        where: { id: post.id },
-        relations: {
-            likedBy: true
+        if (action && !exists) {
+            await em
+                .createQueryBuilder()
+                .relation(Post, 'likedBy')
+                .of(postId)
+                .add(userId)
+        } else if (!action && exists) {
+            await em
+                .createQueryBuilder()
+                .relation(Post, 'likedBy')
+                .of(postId)
+                .remove(userId)
         }
-    }).then((thisPost) => thisPost.likedBy)
+    })
 }
 
 
 
 // reposts
 
-export async function repostPost(user: User, post: Post) {
-    return await handleRepostPost(user, post, true)
+export async function repostPost(userId: string, postId: string) {
+    await handleRepostPost(userId, postId, true)
 }
 
-export async function unrepostPost(user: User, post: Post) {
-    return await handleRepostPost(user, post, false)
+export async function unrepostPost(userId: string, postId: string) {
+    await handleRepostPost(userId, postId, false)
 }
 
 export async function repostHook(user: User, post: Post, action: boolean) {
-    try {
-        await makeNotification(
-            post.author,
-            NotificationType.REPOST,
-            post,
-            user,
-            action
-        )
-    } catch (error) {
-        console.log("repost hook make notification error")
-        // do nothing
-    }
-    return await makeFeedActivity(
+    await makeNotification(
+        post.author,
+        NotificationType.REPOST,
+        post,
+        user,
+        action
+    )
+    await makeFeedActivity(
         user,
         post,
         FeedActivityType.REPOST,
@@ -516,28 +496,30 @@ export async function repostHook(user: User, post: Post, action: boolean) {
     )
 }
 
-export async function handleRepostPost(user: User, { id }: Post, action: boolean) {
-    const loadedPost = await AppDataSource.getRepository(Post).findOne({
-        relations: { reposters: true },
-        where: { id }
-    })
-    if (action) {
-        if (loadedPost.reposters.filter((checkUser) => checkUser.id === user.id).length === 0) {
-            loadedPost.reposters.push(user)
-        }
-    } else {
-        loadedPost.reposters = loadedPost.reposters.filter((checkUser) => checkUser.id !== user.id)
-    }
-    return await AppDataSource.getRepository(Post).save(loadedPost)
-}
+export async function handleRepostPost(userId: string, postId: string, action: boolean) {
+    await doTransaction(async (em) => {
+        const exists = await em
+            .getRepository(Post)
+            .createQueryBuilder('post')
+            .innerJoinAndSelect('post.reposters', 'repostingUser')
+            .where('post.id = :postId', { postId })
+            .andWhere('repostingUser.id = :userId', { userId })
+            .getExists()
 
-export async function getPostReposts(post: Post) {
-    return AppDataSource.getRepository(Post).findOne({
-        where: { id: post.id },
-        relations: {
-            reposters: true
+        if (action && !exists) {
+            await em
+                .createQueryBuilder()
+                .relation(Post, 'reposters')
+                .of(postId)
+                .add(userId)
+        } else if (!action && exists) {
+            await em
+                .createQueryBuilder()
+                .relation(Post, 'reposters')
+                .of(postId)
+                .remove(userId)
         }
-    }).then((thisPost) => thisPost.reposters)
+    })
 }
 
 
@@ -545,16 +527,15 @@ export async function getPostReposts(post: Post) {
 // follows
 
 export async function follow(userGoogleId: string, targetUserId: string) {
-    return await handleFollow(userGoogleId, targetUserId, true)
+    await handleFollow(userGoogleId, targetUserId, true)
 }
 
 export async function unfollow(userGoogleId: string, targetUserId: string) {
     await handleFollow(userGoogleId, targetUserId, false)
-
 }
 
 export async function followHook(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
-    return await makeNotification(
+    await makeNotification(
         await AppDataSource.getRepository(User).findOneBy({ id: targetUserId }),
         NotificationType.FOLLOW,
         null,
@@ -571,61 +552,48 @@ async function handleFollow(sourceUserGoogleId: string, targetUserId: string, ac
         if (action) {
             if (!loadedSourceUser.following.some((user) => user.id === targetUserId)) {
                 loadedSourceUser.following.push(loadedTargetUser)
-                if (loadedSourceUser.followers.some((user) => user.id === targetUserId)) {
+                loadedSourceUser.followingCount += 1
+                loadedTargetUser.followerCount += 1
+                if (await isFollower(sourceUserGoogleId, targetUserId, em)) {
                     mutualDelta = 1
                 }
             }
         } else {
-            const initialFollowingLength = loadedSourceUser.following.length
-            loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUserId)
-            if (loadedSourceUser.following.length !== initialFollowingLength) {
-                if (loadedSourceUser.followers.some((user) => user.id === targetUserId)) {
+            if (loadedSourceUser.following.some((user) => user.id === targetUserId)) {
+                loadedSourceUser.following = loadedSourceUser.following.filter((user) => user.id !== targetUserId)
+                loadedSourceUser.followingCount -= 1
+                loadedTargetUser.followerCount -= 1
+                if (await isFollower(sourceUserGoogleId, targetUserId, em)) {
                     mutualDelta = -1
                 }
             }
 
             // remove friend
             loadedSourceUser.friends = loadedSourceUser.friends.filter((user) => user.id !== targetUserId)
+            loadedTargetUser.friends = loadedTargetUser.friends.filter((user) => user.id !== loadedSourceUser.id)
         }
-        loadedSourceUser.followingCount = loadedSourceUser.following.length
         loadedSourceUser.mutualCount += mutualDelta
-        await em.save(User, loadedSourceUser)
-        const loadedAgainTargetUser = await em.findOne(User, {
-            relations: {
-                followers: true
-            },
-            where: { id: targetUserId }
-        })
+        loadedTargetUser.mutualCount += mutualDelta
 
-        loadedAgainTargetUser.followerCount = loadedAgainTargetUser.followers.length
-        loadedAgainTargetUser.mutualCount += mutualDelta
-        await em.save(User, loadedAgainTargetUser)
+        await em.save(User, loadedTargetUser)
+        await em.save(User, loadedSourceUser)
     })
 }
 
-export async function getFollowers(user: User) {
-    return AppDataSource.getRepository(User).findOne({
-        where: { id: user.id },
-        relations: {
-            followers: true
-        }
-    }).then((user) => user.followers)
-}
-
-export async function getFollowing(user: User) {
-    return AppDataSource.getRepository(User).findOne({
-        where: { id: user.id },
-        relations: {
-            following: true
-        }
-    }).then((user) => user.following)
+async function isFollower(sourceUserGoogleId: string, potentialFollowerId: string, em: EntityManager) {
+    return await em
+        .getRepository(User)
+        .createQueryBuilder('user')
+        .innerJoinAndSelect('user.followers', 'follower')
+        .where('user.googleid = :sourceUserGoogleId', { sourceUserGoogleId })
+        .andWhere('follower.id = :potentialFollowerId', { potentialFollowerId })
+        .getExists()
 }
 
 export async function getFollowRelationship(googleid: string, targetUserId: string) {
     const sourceUser = await AppDataSource.getRepository(User).findOne({
         where: { googleid },
         relations: {
-            followers: true,
             following: true,
             friends: true
         }
@@ -635,7 +603,15 @@ export async function getFollowRelationship(googleid: string, targetUserId: stri
     }
 
     const following = sourceUser.following.some((user) => user.id === targetUserId)
-    const followedBy = sourceUser.followers.some((user) => user.id === targetUserId)
+    const followedBy = await AppDataSource
+        .getRepository(User)
+        .findOne({
+            where: { id: targetUserId },
+            relations: {
+                following: true
+            }
+        })
+        .then((user) => user.following.some((followed) => followed.googleid === googleid))
     const friend = sourceUser.friends.some((user) => user.id === targetUserId)
 
     return { following, followedBy, friend }
@@ -646,15 +622,15 @@ export async function getFollowRelationship(googleid: string, targetUserId: stri
 // friending
 
 export async function friend(userGoogleId: string, targetUserId: string) {
-    return await handleFriend(userGoogleId, targetUserId, true)
+    await handleFriend(userGoogleId, targetUserId, true)
 }
 
 export async function unfriend(userGoogleId: string, targetUserId: string) {
-    return await handleFriend(userGoogleId, targetUserId, false)
+    await handleFriend(userGoogleId, targetUserId, false)
 }
 
 export async function friendHook(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
-    return await makeNotification(
+    await makeNotification(
         await AppDataSource.getRepository(User).findOneBy({ id: targetUserId }),
         NotificationType.FRIENDING,
         null,
@@ -688,13 +664,15 @@ async function handleFriend(sourceUserGoogleId: string, targetUserId: string, ac
         const [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
         if (action) {
             if (
-                loadedSourceUser.followers.some((user) => user.id === targetUserId)
+                await isFollower(sourceUserGoogleId, targetUserId, em)
                 && loadedSourceUser.following.some((user) => user.id === targetUserId)
             ) {
+                // is a mutual
                 if (!loadedSourceUser.friends.some((user) => user.id === targetUserId)) {
                     loadedSourceUser.friends.push(loadedTargetUser)
                 }
             } else {
+                // is not a mutual
                 throw new Error("Failed to add this user as your friend - this can only be done to mutuals.")
             }
         } else {
@@ -704,14 +682,16 @@ async function handleFriend(sourceUserGoogleId: string, targetUserId: string, ac
     })
 }
 
+
+
 // blocks
 
 export async function blockUser(userGoogleId: string, targetUserId: string) {
-    return await handleBlock(userGoogleId, targetUserId, true)
+    await handleBlock(userGoogleId, targetUserId, true)
 }
 
 export async function unblockUser(userGoogleId: string, targetUserId: string) {
-    return await handleBlock(userGoogleId, targetUserId, false)
+    await handleBlock(userGoogleId, targetUserId, false)
 }
 
 async function handleBlock(googleid: string, targetUserId: string, action: boolean) {
@@ -770,104 +750,82 @@ export async function getBlocklist(googleid: string) {
 
 // message is checked for length beforehand
 export async function sendDM(dmSender: User, dmRecipient: User, message: string) {
-    // generate DM id
-    // declare next id
-    // check the largest number
-    // if it is = 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 1,
-    //   check largest number < NUMBER_OF_RETRIEVABLE_DM_S (this shouldn't be one less than that value)
-    //   if it is nonexistent,
-    //     next id = 0
-    //   else,
-    //     next id = largest number + 1
-    //     if it is = consts.NUMBER_OF_RETRIEVABLE_DM_S - 2,
-    //       set clear latter flag
-    // else,
-    //   next id = largest number + 1
-    //   if it is = 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 2,
-    //     set clear former flag
-    //
-    // execute on clear former or clear latter flags
-    // execute on DM insertion
-    return await AppDataSource.manager.transaction(
-        "SERIALIZABLE",
-        async (transactionEntityManager) => {
+    return await doTransaction(async (transactionEntityManager) => {
+        let nextOrdering: number
+        let clearFormer = false
+        let clearLatter = false
 
-            let nextOrdering: number
-            let clearFormer = false
-            let clearLatter = false
+        let largest
+        const largestOrderingDM = await transactionEntityManager.findOne(DM, {
+            where: [
+                { sender: { id: dmSender.id } },
+                { recipient: { id: dmSender.id } }
+            ],
+            order: {
+                ordering: "DESC"
+            }
+        })
+        if (largestOrderingDM) {
+            largest = largestOrderingDM.ordering
+            if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 1) {
 
-            let largest
-            const largestOrderingDM = await transactionEntityManager.findOne(DM, {
-                where: [
-                    { sender: { id: dmSender.id } },
-                    { recipient: { id: dmSender.id } }
-                ],
-                order: {
-                    ordering: "DESC"
-                }
-            })
-            if (largestOrderingDM) {
-                largest = largestOrderingDM.ordering
-                if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 1) {
-
-                    largest = await transactionEntityManager
-                        .getRepository(DM)
-                        .createQueryBuilder("dm")
-                        .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                        .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                        .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                        .orderBy("dm.ordering", "DESC")
-                        .getOne()
-                        .then((dm) => dm?.ordering)
-                    if (largest === undefined) {
-                        nextOrdering = 0
-                    } else {
-                        nextOrdering = largest + 1
-                        if (largest === consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
-                            clearLatter = true
-                        }
-                    }
+                largest = await transactionEntityManager
+                    .getRepository(DM)
+                    .createQueryBuilder("dm")
+                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
+                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
+                    .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
+                    .orderBy("dm.ordering", "DESC")
+                    .getOne()
+                    .then((dm) => dm?.ordering)
+                if (largest === undefined) {
+                    nextOrdering = 0
                 } else {
                     nextOrdering = largest + 1
-                    if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
-                        clearFormer = true
+                    if (largest === consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
+                        clearLatter = true
                     }
                 }
-
-                if (clearFormer) {
-                    const deleteDmIDs = await transactionEntityManager
-                        .getRepository(DM)
-                        .createQueryBuilder("dm")
-                        .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                        .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                        .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                        .getMany()
-                        .then((dms) => dms.map((dm) => dm.id))
-                    await transactionEntityManager.delete(DM, deleteDmIDs)
-                } else if (clearLatter) {
-                    const deleteDmIDs = await transactionEntityManager
-                        .getRepository(DM)
-                        .createQueryBuilder("dm")
-                        .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
-                        .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
-                        .andWhere("dm.ordering >= :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
-                        .getMany()
-                        .then((dms) => dms.map((dm) => dm.id))
-                    await transactionEntityManager.delete(DM, deleteDmIDs)
-                }
             } else {
-                nextOrdering = 0
+                nextOrdering = largest + 1
+                if (largest === 2 * consts.NUMBER_OF_RETRIEVABLE_DM_S - 2) {
+                    clearFormer = true
+                }
             }
 
-            const dm = new DM()
-            dm.id = dmSender.id + "/" + dmRecipient.id + ":" + nextOrdering
-            dm.ordering = nextOrdering
-            dm.sender = dmSender
-            dm.recipient = dmRecipient
-            dm.message = message
-            return await transactionEntityManager.save(dm)
+            if (clearFormer) {
+                const deleteDmIDs = await transactionEntityManager
+                    .getRepository(DM)
+                    .createQueryBuilder("dm")
+                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
+                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
+                    .andWhere("dm.ordering < :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
+                    .getMany()
+                    .then((dms) => dms.map((dm) => dm.id))
+                await transactionEntityManager.delete(DM, deleteDmIDs)
+            } else if (clearLatter) {
+                const deleteDmIDs = await transactionEntityManager
+                    .getRepository(DM)
+                    .createQueryBuilder("dm")
+                    .where("dm.id like :queryID", { queryID: `%${dmSender.id}%` })
+                    .andWhere("dm.id like :queryID", { queryID: `%${dmRecipient.id}%` })
+                    .andWhere("dm.ordering >= :threshold", { threshold: consts.NUMBER_OF_RETRIEVABLE_DM_S })
+                    .getMany()
+                    .then((dms) => dms.map((dm) => dm.id))
+                await transactionEntityManager.delete(DM, deleteDmIDs)
+            }
+        } else {
+            nextOrdering = 0
         }
-    )
+
+        const dm = new DM()
+        dm.id = dmSender.id + "/" + dmRecipient.id + ":" + nextOrdering
+        dm.ordering = nextOrdering
+        dm.sender = dmSender
+        dm.recipient = dmRecipient
+        dm.message = message
+        return await transactionEntityManager.save(dm)
+    })
 }
 
 export async function getOneOnOneDMs(user1ID: string, user2ID: string) {
@@ -876,13 +834,13 @@ export async function getOneOnOneDMs(user1ID: string, user2ID: string) {
         .createQueryBuilder("dm")
         .leftJoinAndSelect("dm.sender", "sender")
         .leftJoinAndSelect("dm.recipient", "recipient")
-        .where("dm.id like :queryID", { queryID: `%${user1ID}%` })
-        .andWhere("dm.id like :queryID", { queryID: `%${user2ID}%` })
+        .where("dm.id like :queryID1", { queryID1: `%${user1ID}%` })
+        .andWhere("dm.id like :queryID2", { queryID2: `%${user2ID}%` })
         .getMany()
 }
 
 export async function deleteDM(dm: DM) {
-    return await AppDataSource.getRepository(DM).update(
+    await AppDataSource.getRepository(DM).update(
         { id: dm.id },
         {
             isDeleted: true,
@@ -902,7 +860,7 @@ async function makeNotification(
     user: User,
     type: NotificationType,
     sourcePost: Post | null,
-    sourceUser: User,
+    sourceUser: User | null,
     action: boolean = true
 ) {
     if (action) {
@@ -914,11 +872,38 @@ async function makeNotification(
         const date = new Date()
         date.setDate(date.getDate() + consts.NOTIFICATION_EXPIRY_DAYS)
         notification.expiryDate = date
-        return await AppDataSource.getRepository(Notification).save(notification)
+        await AppDataSource.getRepository(Notification).save(notification)
     } else {
-        return await AppDataSource.getRepository(Notification).delete({
-            user, type, sourcePost, sourceUser
+        let whereClause: FindOptionsWhere<Notification>
+        if (!sourcePost && !sourceUser) {
+            whereClause = {
+                user: { id: user.id },
+                type,
+            }
+        } else if (sourcePost && sourceUser) {
+            whereClause = {
+                user: { id: user.id },
+                type,
+                sourcePost: { id: sourcePost.id },
+                sourceUser: { id: sourceUser.id }
+            }
+        } else if (sourcePost) {
+            whereClause = {
+                user: { id: user.id },
+                type,
+                sourcePost: { id: sourcePost.id },
+            }
+        } else {
+            whereClause = {
+                user: { id: user.id },
+                type,
+                sourceUser: { id: sourceUser.id }
+            }
+        }
+        const notifToDelete = await AppDataSource.getRepository(Notification).findOne({
+            where: whereClause,
         })
+        await AppDataSource.getRepository(Notification).remove(notifToDelete)
     }
 }
 
@@ -937,21 +922,27 @@ async function makeFeedActivity(
         const date = new Date()
         date.setDate(date.getDate() + consts.FEED_ACTIVITY_EXPIRY_DAYS)
         feedActivity.expiryDate = date
-        return await AppDataSource.getRepository(FeedActivity).save(feedActivity)
+        const savedFA = await AppDataSource.getRepository(FeedActivity).save(feedActivity)
     } else {
-        return await AppDataSource.getRepository(FeedActivity).delete({
+        await AppDataSource.getRepository(FeedActivity).delete({
             sourceUser, sourcePost, type
         })
     }
 }
 
-export async function doTransaction(transactionCall: (
-    entityManager: EntityManager) => Promise<void>
+export async function getPostByID(id: string) {
+    return await AppDataSource.getRepository(Post).findOne({
+        where: { id }
+    })
+}
+
+export async function doTransaction<T>(transactionCall: (
+    entityManager: EntityManager) => Promise<T>
 ) {
     return await AppDataSource.manager.transaction(
         "SERIALIZABLE",
         async (transactionEntityManager: EntityManager) => {
-            await transactionCall(transactionEntityManager)
+            return await transactionCall(transactionEntityManager)
         }
     )
 }
@@ -961,7 +952,6 @@ async function checkRelation(sourceUserGoogleId: string, targetUserId: string, a
     const loadedSourceUser = await em.findOne(User, {
         relations: {
             following: true,
-            followers: true,
             friends: true,
             blockedUsers: true
         },
@@ -972,6 +962,7 @@ async function checkRelation(sourceUserGoogleId: string, targetUserId: string, a
     }
     const loadedTargetUser = await em.findOne(User, {
         relations: {
+            friends: true,
             blockedUsers: true
         },
         where: { id: targetUserId }
@@ -993,71 +984,115 @@ async function checkRelation(sourceUserGoogleId: string, targetUserId: string, a
 
 // testing
 
-export async function clearDB() {
-    try {
-        const users = await AppDataSource.getRepository(User).find()
-        for (const user of users) {
-            await deleteUser(user.googleid)
-            if (user.avatar) {
-                try {
-                    await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, user.avatar)
-                } catch (error) {
-                    // TODO: report cloud storage errors
-                    console.log(`Cloud storage error: ${error.message}`)
-                }
-            }
-        }
-    } catch (error) {
-        console.log("error clearing users: " + error.message)
-        throw error
-    }
-
-    try {
-        const DMs = await AppDataSource.getRepository(DM).find()
-        await AppDataSource.getRepository(DM).remove(DMs)
-    } catch (error) {
-        console.log("error clearing DMs: " + error.message)
-        throw error
-    }
+export async function getFollowersDEBUGONLY(user: User): Promise<User[]> {
+    return await AppDataSource
+        .getRepository(User)
+        .findOne({
+            relations: { followers: true },
+            where: { id: user.id }
+        })
+        .then((user) => user.followers)
 }
 
-export async function getNotification(
+export async function getFollowingDEBUGONLY(user: User) {
+    return AppDataSource.getRepository(User).findOne({
+        where: { id: user.id },
+        relations: {
+            following: true
+        }
+    }).then((user) => user.following)
+}
+
+export async function getPostLikesDEBUGONLY(post: Post) {
+    return AppDataSource.getRepository(Post).findOne({
+        where: { id: post.id },
+        relations: {
+            likedBy: true
+        }
+    }).then((thisPost) => thisPost.likedBy)
+}
+
+export async function getPostRepostsDEBUGONLY(post: Post) {
+    return AppDataSource.getRepository(Post).findOne({
+        where: { id: post.id },
+        relations: {
+            reposters: true
+        }
+    }).then((thisPost) => thisPost.reposters)
+}
+
+export async function getNotificationDEBUGONLY(
     user: User,
     type: NotificationType,
     sourcePost: Post | null,
-    sourceUser: User
+    sourceUser: User | null
 ) {
-    return await AppDataSource.getRepository(Notification).findOne({
-        relations: {
-            user: true,
-            sourcePost: true,
-            sourceUser: true
-        },
-        where: {
+    let whereClause: FindOptionsWhere<Notification>
+    if (!sourcePost && !sourceUser) {
+        whereClause = {
+            user: { id: user.id },
+            type,
+        }
+    } else if (sourcePost && sourceUser) {
+        whereClause = {
             user: { id: user.id },
             type,
             sourcePost: { id: sourcePost.id },
             sourceUser: { id: sourceUser.id }
         }
+    } else if (sourcePost) {
+        whereClause = {
+            user: { id: user.id },
+            type,
+            sourcePost: { id: sourcePost.id },
+        }
+    } else {
+        whereClause = {
+            user: { id: user.id },
+            type,
+            sourceUser: { id: sourceUser.id }
+        }
+    }
+    return await AppDataSource.getRepository(Notification).findOne({
+        where: whereClause
     })
 }
 
-export async function getFeedActivity(
+export async function getFeedActivityDEBUGONLY(
     sourceUser: User,
     sourcePost: Post,
     type: FeedActivityType
 ) {
-    return await AppDataSource.getRepository(FeedActivity).findOne({
-        where: {
-            sourceUser: { id: sourceUser.id },
-            sourcePost: { id: sourcePost.id },
-            type
-        }
-    })
+    const feedActivityId = await AppDataSource
+        .getRepository(FeedActivity)
+        .createQueryBuilder('activity')
+        .innerJoinAndSelect('activity.sourceUser', 'sourceUser')
+        .innerJoinAndSelect('activity.sourcePost', 'sourcePost')
+        .where('activity.type = :type', { type })
+        .andWhere('activity.sourceUser = :sourceUserId', { sourceUserId: sourceUser.id })
+        .andWhere('activity.sourcePost = :sourcePostId', { sourcePostId: sourcePost.id })
+        .getOne()
+        .then((activity) => activity.id)
+        .catch((_) => null)
+    if (!feedActivityId) {
+        return feedActivityId
+    }
+    return await AppDataSource.getRepository(FeedActivity).findOneBy({ id: feedActivityId })
 }
 
-export async function getPostByID(id: string) {
-    return await AppDataSource.getRepository(Post).findOne({
-        where: { id }
-    })
+export async function getAllGoogleIDsForDeletionDEBUGONLY() {
+    return await AppDataSource
+        .getRepository(User)
+        .find()
+        .then((users) => users.map((user) => user.googleid))
+}
+
+export async function clearDMsDEBUGONLY() {
+    const DMs = await AppDataSource.getRepository(DM).find()
+    await AppDataSource.getRepository(DM).remove(DMs)
+}
+
+export async function clearHashtagsDEBUGONLY() {
+    const hashtags = await AppDataSource.getRepository(Hashtag).find()
+    await AppDataSource.getRepository(Hashtag).remove(hashtags)
 }

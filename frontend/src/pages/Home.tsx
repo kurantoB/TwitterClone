@@ -1,13 +1,10 @@
 import { useDispatch } from "react-redux"
 import { HeaderMode, addErrorMessage, setHeaderMode } from "../app/appState"
-import { useAppSelector } from "../app/hooks"
 import { ChangeEvent, FormEvent, useState, useEffect } from "react"
 import doAPICall from "../app/apiLayer"
 import { useNavigate } from "react-router-dom"
 
 export default function Home() {
-    const token = useAppSelector((state) => state.tokenId)
-
     const [username, setUsername] = useState<string>("")
     const [usernameError, setUsernameError] = useState<string | null>(null)
 
@@ -58,7 +55,6 @@ export default function Home() {
                         {usernameError && <p className="find-user--error">{usernameError}</p>}
                     </form>
                 </div>
-                {/* {token && <p>Testing only - your authentication token is {token}</p>} */}
             </section>
         </div>
     )

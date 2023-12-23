@@ -10,7 +10,6 @@ export default function Header() {
     const navigate = useNavigate()
 
     const token = useAppSelector((state) => state.tokenId)
-    const showLogin = useAppSelector((state) => state.showLogin)
     const userExists = useAppSelector((state) => state.userExists)
     const headerMode = useAppSelector((state) => state.headerMode)
     const stashedPost = useAppSelector((state) => state.stash)
@@ -72,7 +71,7 @@ export default function Header() {
                 {token && !userExists && <button className="linkButton" onClick={navigateToCreateAccount}>Create Account</button>}
                 <div>
                     {token ? <button className="linkButton" onClick={() => logoutOfSite(dispatch, navigate)}>Logout</button> : (
-                        showLogin && <GoogleLogin
+                        userExists !== null && <GoogleLogin
                             onSuccess={credentialResponse}
                             onError={() => {
                                 dispatch(addErrorMessage("Error - unable to login."))

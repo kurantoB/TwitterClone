@@ -1,5 +1,5 @@
 import consts from "../consts";
-import { Column, Entity, Index, ManyToMany, PrimaryGeneratedColumn } from "typeorm";
+import { Column, Entity, Index, JoinTable, ManyToMany, PrimaryGeneratedColumn } from "typeorm";
 import { Post } from "./Post";
 
 @Entity()
@@ -15,8 +15,8 @@ export class Hashtag {
     tag: string
 
     @ManyToMany(
-        () => Post,
-        (post) => post.hashtags
+        () => Post
     )
+    @JoinTable()
     posts: Post[]
 }

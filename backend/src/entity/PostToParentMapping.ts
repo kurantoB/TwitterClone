@@ -8,7 +8,10 @@ export class PostToParentMapping {
 
     @ManyToOne(
         () => Post,
-        (post) => post.parentMappings
+        (post) => post.parentMappings,
+        {
+            onDelete: 'CASCADE'
+        }
     )
     @Index()
     post: Post
@@ -16,7 +19,10 @@ export class PostToParentMapping {
     @ManyToOne(
         () => Post,
         (post) => post.replyMappings,
-        { nullable: true }
+        {
+            onDelete: 'SET NULL',
+            nullable: true
+        },
     )
     @JoinTable()
     @Index()

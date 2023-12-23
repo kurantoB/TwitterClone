@@ -15,7 +15,7 @@ export default function RouteError() {
 
     useEffect(() => {
         dispatch(setHeaderMode(HeaderMode.NONE))
-    })
+    }, [])
 
     return (
         <>

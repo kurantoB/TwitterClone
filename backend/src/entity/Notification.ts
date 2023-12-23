@@ -46,7 +46,8 @@ export class Notification {
         () => User,
         {
             onDelete: "CASCADE",
-            eager: true
+            eager: true,
+            nullable: true
         }
     )
     sourceUser: User
@@ -57,8 +58,10 @@ export class Notification {
     isSeen: boolean
 
     @CreateDateColumn({ type: "timestamptz" })
+    @Index()
     createTime: Date
 
     @Column({ type: "timestamptz" })
+    @Index()
     expiryDate: Date
 }

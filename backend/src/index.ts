@@ -1,7 +1,7 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { attachPostMedia, blockUser, deletePost, follow, followHook, friend, friendHook, getBlocklist, getFollowRelationship, getFriends, getIsPostVisible, getParentPostsByMappingIds, getPostActivityFromUser, getPostByID, getPostMetadata, getUserByGoogleID, initialize as initializePersistence, isBlockedBy, isBlocking, likePost, postOrReply, postOrReplyHook, reportPost, repostPost, unblockUser, unfollow, unfriend, unlikePost, unrepostPost } from "./persistence"
+import { blockUser, clearDMsDEBUGONLY, clearHashtagsDEBUGONLY, deletePost, follow, followHook, friend, friendHook, getAllGoogleIDsForDeletionDEBUGONLY, getBlocklist, getFollowRelationship, getFriends, getIsPostVisible, getParentPostPromisesByMappingIds, getPostActivityFromUser, getPostByID, getPostMetadata, getUserByGoogleID, initialize as initializePersistence, isBlockedBy, isBlocking, likePost, postOrReply, postOrReplyHook, reportPost, repostPost, unblockUser, unfollow, unfriend, unlikePost, unrepostPost } from "./persistence"
 import { getAllFollowers, getAllFollowing, getAllMutuals, getCommonFollowing, getSpecificFollowers, getSpecificFollowing } from "./utils/followInfo"
 import { getCommonFollowers } from "./utils/followInfo"
 import { getUnacquaintedMutuals } from "./utils/followInfo"
@@ -14,8 +14,8 @@ import consts from "./consts"
 import { OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
-import { deleteMedia, getUserHasAvatar, safeSearchImage } from "./utils/general"
-import testDB, { clearDB, testDB2 } from "./dbtest"
+import { deleteMedia, getUserHasAvatar, safeSearchImage, storeMedia } from "./utils/general"
+import testDB, { testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 import { ImageAnnotatorClient } from "@google-cloud/vision"
 import { VisibilityType } from "./entity/Post"
@@ -32,8 +32,8 @@ configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB2()
-    // await testDB()
-    startServer()
+    await testDB()
+    // startServer()
 })
 
 // Middleware to verify JWT tokens
@@ -488,20 +488,35 @@ function startServer() {
                     vpgoogleid = req.user.sub
                 }
 
-                let newPost = await postOrReply(
+                const filePath = !!files.file && files.file[0].size > 0 ? files.file[0].filepath : null
+
+                const newPost = await postOrReply(
                     req.user.sub,
                     fields.message[0],
+                    !!filePath,
                     visibility,
                     vpgoogleid,
                     parentPosts,
                     hashtags
                 )
-                const uploadedFile = files.file ? files.file[0] : null
-                if (uploadedFile) {
-                    newPost = await attachPostMedia(newPost, uploadedFile.filepath)
-                }
-                await postOrReplyHook(newPost, parentPosts)
+
+                // send the response back to the client before doing post-save operations
                 callback("OK")
+
+                try {
+                    if (filePath) {
+                        const mediaPath = newPost.id + '_media'
+                        await storeMedia(
+                            consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME,
+                            filePath,
+                            mediaPath
+                        )
+                    }
+                    await postOrReplyHook(newPost, parentPosts)
+                } catch (error) {
+                    // TODO: report post-callback errors
+                    console.log("/new-post endpoint post-callback error: " + error.message)
+                }
             })
         })
     })
@@ -558,7 +573,7 @@ function startServer() {
     app.get('/get-parent-posts-from-mappings/:mappingids', async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
             const mappingIds = req.params.mappingids.split(',')
-            const posts = await getParentPostsByMappingIds(mappingIds)
+            const posts = await getParentPostPromisesByMappingIds(mappingIds)
             callback({ posts })
         })
     })
@@ -576,36 +591,32 @@ function startServer() {
 
     app.put('/like-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            const user = await getUserByGoogleID(req.user.sub)
-            const post = await getPostByID(req.params.postid)
-            await likePost(user, post)
+            const userId = (await getUserByGoogleID(req.user.sub)).id
+            await likePost(userId, req.params.postid)
             callback({ success: true })
         })
     })
 
     app.put('/unlike-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            const user = await getUserByGoogleID(req.user.sub)
-            const post = await getPostByID(req.params.postid)
-            await unlikePost(user, post)
+            const userId = (await getUserByGoogleID(req.user.sub)).id
+            await unlikePost(userId, req.params.postid)
             callback({ success: true })
         })
     })
 
     app.put('/repost-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            const user = await getUserByGoogleID(req.user.sub)
-            const post = await getPostByID(req.params.postid)
-            await repostPost(user, post)
+            const userId = (await getUserByGoogleID(req.user.sub)).id
+            await repostPost(userId, req.params.postid)
             callback({ success: true })
         })
     })
 
     app.put('/unrepost-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
-            const user = await getUserByGoogleID(req.user.sub)
-            const post = await getPostByID(req.params.postid)
-            await unrepostPost(user, post)
+            const userId = (await getUserByGoogleID(req.user.sub)).id
+            await unrepostPost(userId, req.params.postid)
             callback({ success: true })
         })
     })
@@ -670,6 +681,7 @@ function handleCreateOrUpdateAccount(
         }
         const formErrors: string[] = []
         if (!userId) {
+            // username is only processed if this is an account creation
             if (fields.username[0].length < 4 || fields.username[0].length > consts.MAX_USERNAME_LENGTH) {
                 formErrors.push(`username/Handle must be between 4 and ${consts.MAX_USERNAME_LENGTH} characters.`)
             } else if (!/^[a-zA-Z0-9_]*$/.test(fields.username[0])) {
@@ -718,4 +730,14 @@ function handleCreateOrUpdateAccount(
             }
         }
     })
+}
+
+export async function clearDB() {
+    const googleids = await getAllGoogleIDsForDeletionDEBUGONLY()
+    for (const googleid of googleids) {
+        await deleteUserAccount(googleid, (_) => { })
+    }
+
+    await clearDMsDEBUGONLY()
+    await clearHashtagsDEBUGONLY()
 }

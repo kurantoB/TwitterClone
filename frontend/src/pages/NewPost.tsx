@@ -33,7 +33,7 @@ export default function NewPost() {
         }
 
         dispatch(setHeaderMode(HeaderMode.NONE))
-    }, [selectedFile])
+    }, [])
 
     const addFromStash = () => {
         setAddedFromStash(stash)

@@ -90,6 +90,11 @@ export default function ViewProfile() {
     const [hasMoreAllFollowing, setHasMoreAllFollowing] = useState(true)
 
     useEffect(() => {
+        if (userExists === null) {
+            // still trying to do persistent login
+            return
+        }
+
         dispatch(setHeaderMode(HeaderMode.NONE))
 
         setFollowing(false)

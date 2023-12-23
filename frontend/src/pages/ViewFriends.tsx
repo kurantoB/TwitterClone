@@ -15,6 +15,10 @@ export default function ViewFriends() {
     const token = useAppSelector((state) => state.tokenId)
 
     useEffect(() => {
+        if (userExists === null) {
+            // still trying to do persistent login
+            return
+        }
         if (!accessToken || !userExists) {
             navigate("/error")
             return
@@ -27,7 +31,7 @@ export default function ViewFriends() {
                 setFriendUsernames(body.friendUsernames)
             }
         })
-    }, [])
+    }, [userExists])
 
     return (
         <div className="view-profile">

@@ -1,7 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, JoinTable, ManyToMany, ManyToOne, OneToMany, PrimaryGeneratedColumn } from "typeorm"
 import { User } from "./User"
 import consts from "../consts"
-import { Hashtag } from "./Hashtag"
 import { PostToParentMapping } from "./PostToParentMapping"
 
 export enum VisibilityType {
@@ -81,13 +80,7 @@ export class Post {
     )
     visibilityPerspective: User
 
-    @ManyToMany(
-        () => Hashtag,
-        (hashtag) => hashtag.posts
-    )
-    @JoinTable()
-    hashtags: Hashtag[]
-
     @CreateDateColumn({ type: "timestamptz" })
+    @Index()
     createTime: Date
 }

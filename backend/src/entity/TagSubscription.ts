@@ -15,7 +15,8 @@ export class TagSubscription {
 
     @ManyToOne(
         () => User,
-        (user) => user.tagsubs
+        (user) => user.tagsubs,
+        { onDelete: 'CASCADE' }
     )
     user: User
 }

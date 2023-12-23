@@ -17,29 +17,27 @@ export async function createOrUpdateAccount(
     isDeleteAvatar: boolean,
     callback: (responseVal: any) => void
 ) {
-
     // perform safe search detection on the avatar
     if (avatarUploadFilename && !await safeSearchImage(avatarUploadFilename)) {
         throw new Error(`avatar/Uploaded file has been found to likely contain objectionable content. See: terms of service.`)
     }
 
-    await Persistence.createOrUpdateAccountHelper(userId, googleid, username, bio, shortBio)
+    await Persistence.createOrUpdateAccountHelper(userId, googleid, username, bio, shortBio, !!avatarUploadFilename)
+
     // send the response back to the client before doing cloud storage operations
     callback("OK")
 
-    let avatarFilename: string = null
     try {
         if (isDeleteAvatar) {
             const deleteAvatarFilename = await Persistence.deleteAndGetUserAvatar(userId)
-            await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, avatarFilename)
-        }
-        if (avatarUploadFilename) {
+            await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, deleteAvatarFilename)
+        } else if (avatarUploadFilename) {
             if (!userId) {
                 // Newly-created user ID
                 userId = await getUserIdFromToken(googleid)
             }
 
-            avatarFilename = `${userId}_avatar`
+            const avatarFilename = `${userId}_avatar`
             await storeMedia(
                 consts.CLOUD_STORAGE_AVATAR_BUCKETNAME,
                 avatarUploadFilename,
@@ -47,17 +45,8 @@ export async function createOrUpdateAccount(
             )
         }
     } catch (error) {
-        // TODO: report cloud storage errors
-        console.log(`Cloud storage error: ${error.message}`)
-    }
-
-    try {
-        if (avatarFilename) {
-            await Persistence.updateUserAvatar(userId, avatarFilename)
-        }
-    } catch (error) {
-        // TODO: report DB errors
-        console.log(`DB error: ${error.message}`)
+        // TODO: report post-callback errors
+        console.log("Create or update account post-callback error: " + error.message)
     }
 }
 
@@ -65,17 +54,29 @@ export async function deleteUserAccount(
     googleid: string,
     callback: (responseVal: any) => void
 ) {
-    const avatarFilename = await Persistence.getUserAvatar(googleid)
-    await Persistence.deleteUser(googleid)
-    // send the response back to the client before doing cloud storage operations
+    // must be executed before the user is removed from the DM entries
+    await Persistence.cleanupDeletedUserDMs(googleid)
+    
+    const delResult = await Persistence.deleteUser(googleid)
+
+    // send the response back to the client before doing cleanup operations
     callback("OK")
 
-    if (avatarFilename) {
-        try {
-            await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, avatarFilename)
-        } catch (error) {
-            // TODO: report cloud storage errors
-            console.log(`Cloud storage error: ${error.message}`)
+    try {
+        await cleanupDeletedUser(delResult)
+    } catch (error) {
+        // TODO: report post-callback errors
+        console.log("Delete user account post-callback error: " + error.message)
+    }
+}
+
+export async function cleanupDeletedUser(delResult: Persistence.DeleteUserResult) {
+    if (delResult.avatarFilename) {
+        await deleteMedia(consts.CLOUD_STORAGE_AVATAR_BUCKETNAME, delResult.avatarFilename)
+    }
+    if (delResult.mediaPostIds) {
+        for (const mediaPostId of delResult.mediaPostIds) {
+            await deleteMedia(consts.CLOUD_STORAGE_POSTMEDIA_BUCKETNAME, mediaPostId + "_media")
         }
     }
 }

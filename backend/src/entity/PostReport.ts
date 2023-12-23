@@ -38,8 +38,10 @@ export class PostReport {
     reportee: User
 
     @CreateDateColumn({ type: "timestamptz" })
+    @Index()
     reportTime: Date
 
     @Column({ type: "timestamptz" })
+    @Index()
     expiryDate: Date
 }

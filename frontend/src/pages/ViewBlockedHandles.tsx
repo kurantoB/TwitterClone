@@ -14,6 +14,10 @@ export default function ViewBlockedHandles() {
     const dispatch = useAppDispatch()
 
     useEffect(() => {
+        if (userExists === null) {
+            // still trying to do persistent login
+            return
+        }
         if (!accessToken || !userExists) {
             navigate("/error")
             return
@@ -26,7 +30,7 @@ export default function ViewBlockedHandles() {
                 setBlockedUsernames(body.blockedUsernames)
             }
         })
-    }, [])
+    }, [userExists])
 
     return (
         <div className="view-profile">

@@ -18,8 +18,10 @@ export class ActionTaken {
     targetUser: User
 
     @CreateDateColumn({ type: "timestamptz" })
+    @Index()
     actionTime: Date
 
     @Column({ type: "timestamptz" })
+    @Index()
     expiryDate: Date
 }
