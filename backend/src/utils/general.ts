@@ -30,3 +30,9 @@ export async function deleteMedia(bucketName: string, fileName: string) {
         .file(fileName)
         .delete()
 }
+
+export async function blockCheck(googleid: string, id: string) {
+    if (!await Persistence.isBlockedBy(googleid, id)) {
+        throw new Error("Error - user is blocked from interacting with the target.")
+    }
+}

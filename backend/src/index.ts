@@ -1,7 +1,7 @@
 import express from "express"
 import https from 'https'
 import fs from 'fs'
-import { blockUser, clearDMsDEBUGONLY, clearHashtagsDEBUGONLY, deletePost, follow, followHook, friend, friendHook, getAllGoogleIDsForDeletionDEBUGONLY, getBlocklist, getFollowRelationship, getFriends, getIsPostVisible, getParentPostPromisesByMappingIds, getPostActivityFromUser, getPostByID, getPostMetadata, getUserByGoogleID, initialize as initializePersistence, isBlockedBy, isBlocking, likePost, postOrReply, postOrReplyHook, reportPost, repostPost, unblockUser, unfollow, unfriend, unlikePost, unrepostPost } from "./persistence"
+import { blockUser, blockUserHook, clearDMsDEBUGONLY, clearHashtagsDEBUGONLY, deletePost, follow, followHook, friend, friendHook, getAllGoogleIDsForDeletionDEBUGONLY, getBlocklist, getFollowRelationship, getFriends, getIsPostVisible, getParentPostPromisesByMappingIds, getPostActivityFromUser, getPostByID, getPostMetadata, getUserByGoogleID, initialize as initializePersistence, isBlockedBy, isBlocking, likePost, postOrReply, postOrReplyHook, reportPost, repostPost, unblockUser, unfollow, unfriend, unlikePost, unrepostPost } from "./persistence"
 import { getAllFollowers, getAllFollowing, getAllMutuals, getCommonFollowing, getSpecificFollowers, getSpecificFollowing } from "./utils/followInfo"
 import { getCommonFollowers } from "./utils/followInfo"
 import { getUnacquaintedMutuals } from "./utils/followInfo"
@@ -14,7 +14,7 @@ import consts from "./consts"
 import { OAuth2Client, TokenPayload } from "google-auth-library"
 import { configDotenv } from "dotenv"
 import cors from 'cors'
-import { deleteMedia, getUserHasAvatar, safeSearchImage, storeMedia } from "./utils/general"
+import { blockCheck, deleteMedia, getUserHasAvatar, safeSearchImage, storeMedia } from "./utils/general"
 import testDB, { testDB2 } from "./dbtest"
 import { getUserIdFromToken, getUsernameFromToken } from "./userGetter"
 import { ImageAnnotatorClient } from "@google-cloud/vision"
@@ -32,8 +32,8 @@ configDotenv()
 
 initializePersistence().then(async () => {
     // await testDB2()
-    // await testDB()
-    startServer()
+    await testDB()
+    // startServer()
 })
 
 // Middleware to verify JWT tokens
@@ -198,6 +198,7 @@ function startServer() {
         await wrapAPICall(req, res, async (req, callback) => {
             await blockUser(req.user.sub, req.params.targetuserid)
             callback("OK")
+            await blockUserHook(req.user.sub, req.params.targetuserid)
         })
     })
 
@@ -224,6 +225,7 @@ function startServer() {
 
     app.patch('/follow/:targetuserid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
+            await blockCheck(req.user.sub, req.params.targetuserid)
             await follow(req.user.sub, req.params.targetuserid)
             callback("OK")
             await followHook(req.user.sub, req.params.targetuserid, true)
@@ -240,6 +242,7 @@ function startServer() {
 
     app.patch('/friend/:targetuserid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
+            await blockCheck(req.user.sub, req.params.targetuserid)
             await friend(req.user.sub, req.params.targetuserid)
             callback("OK")
             await friendHook(req.user.sub, req.params.targetuserid, true)
@@ -585,12 +588,15 @@ function startServer() {
                 throw new Error("User not found")
             }
             const post = await getPostByID(req.params.postid)
+            await blockCheck(req.user.sub, post.author.id)
             callback({ reportStatus: await reportPost(post, reporter) })
         })
     })
 
     app.put('/like-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
+            const postAuthorId = (await getPostByID(req.params.postid)).author.id
+            await blockCheck(req.user.sub, postAuthorId)
             const userId = (await getUserByGoogleID(req.user.sub)).id
             await likePost(userId, req.params.postid)
             callback({ success: true })
@@ -607,6 +613,8 @@ function startServer() {
 
     app.put('/repost-post/:postid', verifyToken, async (req, res) => {
         await wrapAPICall(req, res, async (req, callback) => {
+            const postAuthorId = (await getPostByID(req.params.postid)).author.id
+            await blockCheck(req.user.sub, postAuthorId)
             const userId = (await getUserByGoogleID(req.user.sub)).id
             await repostPost(userId, req.params.postid)
             callback({ success: true })

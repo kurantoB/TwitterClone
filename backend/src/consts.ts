@@ -33,5 +33,6 @@ export default {
 
     // values
     CLOUD_STORAGE_AVATAR_BUCKETNAME: "twitterclone-avatars",
+    CLOUD_STORAGE_ROOT: "https://storage.googleapis.com",
     CLOUD_STORAGE_POSTMEDIA_BUCKETNAME: "twitterclone-postmedia"
 }

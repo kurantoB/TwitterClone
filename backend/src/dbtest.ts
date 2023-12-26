@@ -8,6 +8,10 @@ import { DM } from './entity/DM'
 import { clearDB } from './index'
 import { cleanupDeletedUser } from './utils/account'
 import { DMSession } from './entity/DMSession'
+import { assert } from 'console'
+import { storeMedia } from './utils/general'
+import https, { RequestOptions } from 'https'
+import { IncomingHttpHeaders } from 'http'
 
 export async function testDB2() {
 }
@@ -19,13 +23,24 @@ function conditionalLog(msg: string) {
     }
 }
 
+const mediaReqPromise = (url: string) => new Promise<IncomingHttpHeaders>((resolve) => {
+    const options: RequestOptions = {
+        method: 'GET',
+        headers: { 'Content-Type': 'image/*' }
+    }
+    const req = https.request(url, options, res => {
+        res.on('data', () => {
+            const { headers } = res
+            resolve(headers)
+        })
+    })
+    req.end()
+})
+
 export default async function testDB() {
-    const kurantoBID = "113542394053227098585"
-    const kurantoNoMichiID = "113011160176295257673";
+    const kurantoBGoogleId = "113542394053227098585"
+    const kurantoNoMichiGoogleId = "113011160176295257673";
     const dummyUserID = "dummygoogleid"
-    conditionalLog("kurantoB googleid: " + kurantoBID)
-    conditionalLog("kurantoNoMichi googleid: " + kurantoNoMichiID)
-    conditionalLog("dummyUser googleid: " + dummyUserID)
 
     const toPrintableUser = (user: User) => {
         return user ? {
@@ -76,216 +91,374 @@ export default async function testDB() {
         } : dmSession
     }
 
-    let me: User
+    let kurantoB: User
     let kurantoNoMichi: User
     let dummyUser: User
 
-    conditionalLog("\n\n===USER===")
+    conditionalLog(">> USER")
 
     await clearDB()
-    conditionalLog("DB cleared")
+    assert(await Persistence.checkDBEmptyDEBUGONLY(), "DB not cleared")
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "", false)
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog("Inserted new user: " + JSON.stringify(toPrintableUser(me)))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBGoogleId, "kurantoB", "", "", true)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    const avatarFilename = `${kurantoB.id}_avatar`
+    await storeMedia(
+        consts.CLOUD_STORAGE_AVATAR_BUCKETNAME,
+        "C:\\Users\\Dennis\\My Art\\selfPortrait.png",
+        avatarFilename
+    )
 
-    // getUser
-    const loadedMe = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog("Loaded user: " + JSON.stringify(toPrintableUser(loadedMe)))
+    conditionalLog("  >> GET USER")
 
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(kurantoB, "Unable to load user")
+    assert(kurantoB.avatar === `${kurantoB.id}_avatar`)
+    const avatarURL = `${consts.CLOUD_STORAGE_ROOT}/${consts.CLOUD_STORAGE_AVATAR_BUCKETNAME}/${kurantoB.id}_avatar`
+    const resHeaders = await mediaReqPromise(avatarURL)
+    assert(parseInt(resHeaders['content-length']) > 0, "Response header content-length expected to be greater than 0")
+
+    let errorReached = false
     try {
-        await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "", false)
+        await Persistence.createOrUpdateAccountHelper(null, kurantoBGoogleId, null, "", "", false)
     } catch (error) {
-        conditionalLog("Trying to insert kurantoB resulted in: " + error)
+        errorReached = true
     }
+    assert(errorReached, "Expected error when reinserting user")
 
-    // deleteUser
-    const delResult0 = await Persistence.deleteUser(me.googleid)
+    conditionalLog("  >> EDIT USER")
+
+    await Persistence.createOrUpdateAccountHelper(kurantoB.id, kurantoBGoogleId, null, "A bio", "A short bio", false)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(kurantoB.bio === "A bio" && kurantoB.shortBio === "A short bio", "Expected updated user bio and short bio")
+
+    conditionalLog("  >> DELETE USER")
+
+    const delResult0 = await Persistence.deleteUser(kurantoBGoogleId)
     await cleanupDeletedUser(delResult0)
-    conditionalLog("Deleted user " + me.googleid)
-    const deleteUserGetResult = await Persistence.getUserByGoogleID(me.googleid)
-    conditionalLog("Try get kurantoB: " + JSON.stringify(deleteUserGetResult))
-
-    conditionalLog("\n\n===FOLLOW, POST, LIKE, REPOST===")
+    const deleteUserGetResult = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(!deleteUserGetResult, "Expected empty query results after user deletion")
 
     await clearDB()
-    conditionalLog("DB cleared")
+    assert(await Persistence.checkDBEmptyDEBUGONLY(), "DB not cleared")
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "", false)
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog("Inserted post user: " + JSON.stringify(toPrintableUser(me)))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBGoogleId, "kurantoB", "", "", false)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "", false)
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog("Inserted follower user: " + JSON.stringify(toPrintableUser(kurantoNoMichi)))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiGoogleId, "kurantonomichi", "", "", false)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
 
-    conditionalLog("\n==FOLLOW")
+    conditionalLog(">> FOLLOW")
 
-    await Persistence.follow(kurantoNoMichi.googleid, me.id)
-    conditionalLog("Follow done")
-    const postUserFollowers = await Persistence.getFollowersDEBUGONLY(me)
-    conditionalLog("Post user followers: " + JSON.stringify(toPrintableUsers(postUserFollowers)))
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
+    await Persistence.follow(kurantoNoMichiGoogleId, kurantoB.id)
+    let postUserFollowers = await Persistence.getFollowersDEBUGONLY(kurantoB)
+    assert(postUserFollowers.length === 1 && postUserFollowers[0].googleid === kurantoNoMichiGoogleId, "Post user follower not as expected")
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(kurantoB.followerCount === 1 && kurantoB.followingCount === 0 && kurantoB.mutualCount === 0, "Post user followers/following/mutual is not 1/0/0")
     const followerUserFollowing = await Persistence.getFollowingDEBUGONLY(kurantoNoMichi)
-    conditionalLog("Follower user following: " + JSON.stringify(toPrintableUsers(followerUserFollowing)))
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
-    await Persistence.followHook(kurantoNoMichi.googleid, me.id, true)
-    conditionalLog("Inserted new follow notification.")
-    let followNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.FOLLOW, null, kurantoNoMichi)
-    conditionalLog("Try get new follow notification: " + JSON.stringify(toPrintableNotif(followNotif)))
+    assert(followerUserFollowing.length === 1 && followerUserFollowing[0].googleid === kurantoBGoogleId, "Following user following not as expected")
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
+    assert(kurantoNoMichi.followerCount === 0 && kurantoNoMichi.followingCount === 1 && kurantoNoMichi.mutualCount === 0, "Following user followers/following/mutual is not 0/1/0")
+    await Persistence.followHook(kurantoNoMichiGoogleId, kurantoB.id, true)
+    let followNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.FOLLOW, null, kurantoNoMichi)
+    assert(followNotif
+        && followNotif.user && followNotif.user.googleid === kurantoBGoogleId
+        && followNotif.type === NotificationType.FOLLOW
+        && followNotif.sourceUser && followNotif.sourceUser.googleid === kurantoNoMichiGoogleId,
+        "Follow notification does not match {user=post user, type=follow, sourceUser=following user}"
+    )
 
+    conditionalLog("  >> FOLLOW BACK")
 
-    conditionalLog("\n==FOLLOW BACK")
+    await Persistence.follow(kurantoBGoogleId, kurantoNoMichi.id)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(kurantoB.followerCount === 1 && kurantoB.followingCount === 1 && kurantoB.mutualCount === 1, "Post user followers/following/mutual is not 1/1/1")
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
+    assert(kurantoNoMichi.followerCount === 1 && kurantoNoMichi.followingCount === 1 && kurantoNoMichi.mutualCount === 1, "Following user followers/following/mutual is not 1/1/1")
+    await Persistence.followHook(kurantoBGoogleId, kurantoNoMichi.id, true)
+    followNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FOLLOW, null, kurantoB)
+    assert(
+        followNotif
+        && followNotif.user && followNotif.user.googleid === kurantoNoMichiGoogleId
+        && followNotif.type === NotificationType.FOLLOW
+        && followNotif.sourceUser && followNotif.sourceUser.googleid === kurantoBGoogleId,
+        "Follow notification does not match {user=following user, type=follow, sourceUser=post user}"
+    )
 
-    await Persistence.follow(me.googleid, kurantoNoMichi.id)
-    conditionalLog("Follow-back done")
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
-    await Persistence.followHook(me.googleid, kurantoNoMichi.id, true)
-    conditionalLog("Inserted new follow notification")
-    followNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FOLLOW, null, me)
-    conditionalLog("Try get new follow notification: " + JSON.stringify(toPrintableNotif(followNotif)))
+    conditionalLog("  >> UNFOLLOW BACK")
 
+    await Persistence.unfollow(kurantoBGoogleId, kurantoNoMichi.id)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
+    assert(kurantoB.followerCount === 1 && kurantoB.followingCount === 0 && kurantoB.mutualCount === 0, "Post user followers/following/mutual is not back to 1/0/0")
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
+    assert(kurantoNoMichi.followerCount === 0 && kurantoNoMichi.followingCount === 1 && kurantoNoMichi.mutualCount === 0, "Following user followers/following/mutual is not back to 0/1/0")
+    await Persistence.followHook(kurantoBGoogleId, kurantoNoMichi.id, false)
+    followNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FOLLOW, null, kurantoB)
+    assert(!followNotif, "Expected empty follow notification after deletion")
 
-    conditionalLog("\n==UNFOLLOW BACK")
+    conditionalLog(">> FRIENDING")
 
-    await Persistence.unfollow(me.googleid, kurantoNoMichi.id)
-    conditionalLog("Undo follow-back done")
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog(`Post user follower/following/mutual counts: ${me.followerCount}, ${me.followingCount}, ${me.mutualCount}`)
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog(`Follower user follower/following/mutual counts: ${kurantoNoMichi.followerCount}, ${kurantoNoMichi.followingCount}, ${kurantoNoMichi.mutualCount}`)
-    await Persistence.followHook(me.googleid, kurantoNoMichi.id, false)
-    conditionalLog("Deleted new Follow notification")
-    followNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FOLLOW, null, me)
-    conditionalLog("Try get new follow notification: " + JSON.stringify(toPrintableNotif(followNotif)))
+    conditionalLog("  >> FRIENDING CONDITION")
 
-    conditionalLog("\n==POST")
+    errorReached = false
+    try {
+        await Persistence.friend(kurantoBGoogleId, kurantoNoMichi.id)
+    } catch (error) {
+        errorReached = true
+    }
+    assert(errorReached, "Expected error when friending non-mutual")
+    
+    await Persistence.follow(kurantoBGoogleId, kurantoNoMichi.id)
+    await Persistence.followHook(kurantoBGoogleId, kurantoNoMichi.id, true)
+    await Persistence.friend(kurantoBGoogleId, kurantoNoMichi.id)
+    let friends = await Persistence.getFriends(kurantoBGoogleId)
+    assert(friends.length === 1 && friends[0] === kurantoNoMichi.username, "Following user expected to be post user's friend")
+    await Persistence.friendHook(kurantoBGoogleId, kurantoNoMichi.id, true)
+    let friendNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FRIENDING, null, kurantoB)
+    assert(
+        friendNotif
+        && friendNotif.user && friendNotif.user.googleid === kurantoNoMichiGoogleId
+        && friendNotif.type === NotificationType.FRIENDING
+        && friendNotif.sourceUser && friendNotif.sourceUser.googleid === kurantoBGoogleId,
+        "Friending notification does not match {user=following user, type=friending, sourceUser=post user}"
+    )
 
-    const newPost = await Persistence.postOrReply(me.googleid, "Hello, this is a short post.", false, VisibilityType.EVERYONE, me.googleid, null, [])
-    conditionalLog("Inserted new post: " + JSON.stringify(toPrintablePost(newPost)))
+    conditionalLog("  >> UNFRIENDING")
+
+    await Persistence.unfriend(kurantoBGoogleId, kurantoNoMichi.id)
+    friends = await Persistence.getFriends(kurantoBGoogleId)
+    assert(friends.length === 0, "Post user friends expected to be empty")
+    await Persistence.friendHook(kurantoBGoogleId, kurantoNoMichi.id, false)
+    friendNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FRIENDING, null, kurantoB)
+    assert(!friendNotif, "Expected empty friending notification after unfriending")
+
+    conditionalLog("  >> AUTO UNFRIENDING")
+    
+    await Persistence.friend(kurantoBGoogleId, kurantoNoMichi.id)
+    await Persistence.friendHook(kurantoBGoogleId, kurantoNoMichi.id, true)
+    await Persistence.unfollow(kurantoBGoogleId, kurantoNoMichi.id)
+    await Persistence.followHook(kurantoBGoogleId, kurantoNoMichi.id, false)
+    friends = await Persistence.getFriends(kurantoBGoogleId)
+    assert(friends.length === 0, "Post user friends expected to be empty")
+    friendNotif = await Persistence.getNotificationDEBUGONLY(kurantoNoMichi, NotificationType.FRIENDING, null, kurantoB)
+    assert(
+        friendNotif
+        && friendNotif.user && friendNotif.user.googleid === kurantoNoMichiGoogleId
+        && friendNotif.type === NotificationType.FRIENDING
+        && friendNotif.sourceUser && friendNotif.sourceUser.googleid === kurantoBGoogleId,
+        "Friending notification does not match {user=following user, type=friending, sourceUser=post user}"
+    )
+
+    conditionalLog(">> BLOCK")
+
+    conditionalLog("  >> BLOCK AUTO UNFOLLOW FOLLOWER")
+
+    postUserFollowers = await Persistence.getFollowersDEBUGONLY(kurantoB)
+    assert(postUserFollowers.length === 1 && postUserFollowers[0].googleid === kurantoNoMichiGoogleId, "Post user follower not as expected")
+    await Persistence.blockUser(kurantoBGoogleId, kurantoNoMichi.id)
+    await Persistence.blockUserHook(kurantoBGoogleId, kurantoNoMichi.id)
+    let blockList = await Persistence.getBlocklist(kurantoBGoogleId)
+    assert(blockList.length === 1 && blockList[0] === kurantoNoMichi.username, "Block list expected to be following user")
+    let isBlockedBy = await Persistence.isBlockedBy(kurantoNoMichiGoogleId, kurantoB.id)
+    assert(isBlockedBy, "Following user expected to be blocked by posting user")
+    let isBlocking = await Persistence.isBlocking(kurantoBGoogleId, kurantoNoMichi.id)
+    assert(isBlocking, "Posting user expected to be blocking following user")
+    postUserFollowers = await Persistence.getFollowersDEBUGONLY(kurantoB)
+    assert(postUserFollowers.length === 0, "Post user followers expected to be empty")
+
+    conditionalLog("  >> UNBLOCK")
+
+    await Persistence.unblockUser(kurantoBGoogleId, kurantoNoMichi.id)
+    blockList = await Persistence.getBlocklist(kurantoBGoogleId)
+    assert(blockList.length === 0, "Block list expected to be empty")
+    isBlockedBy = await Persistence.isBlockedBy(kurantoNoMichiGoogleId, kurantoB.id)
+    assert(!isBlockedBy, "Following user expected to be not blocked by posting user")
+    isBlocking = await Persistence.isBlocking(kurantoBGoogleId, kurantoNoMichi.id)
+    assert(!isBlocking, "Posting user expected to be not blocking following user")
+
+    conditionalLog("  >> BLOCK AUTO UNFOLLOW FOLLOWING")
+
+    await Persistence.follow(kurantoBGoogleId, kurantoNoMichi.id)
+    let followingUserFollowers = await Persistence.getFollowersDEBUGONLY(kurantoNoMichi)
+    assert(followingUserFollowers.length === 1 && followingUserFollowers[0].googleid === kurantoBGoogleId, "Following user follower not as expected")
+    await Persistence.blockUser(kurantoBGoogleId, kurantoNoMichi.id)
+    await Persistence.blockUserHook(kurantoBGoogleId, kurantoNoMichi.id)
+    followingUserFollowers = await Persistence.getFollowersDEBUGONLY(kurantoNoMichi)
+    assert(followingUserFollowers.length === 0, "Following user followers expected to be empty")
+
+    conditionalLog("  >> UNBLOCK")
+
+    await Persistence.unblockUser(kurantoBGoogleId, kurantoNoMichi.id)
+
+    conditionalLog(">> POST")
+
+    conditionalLog("  >> NEW POST")
+
+    let newPost = await Persistence.postOrReply(kurantoBGoogleId, "Hello, this is a short post.", false, VisibilityType.EVERYONE, kurantoBGoogleId, null, [])
     await Persistence.postOrReplyHook(newPost, null)
-    conditionalLog("Inserted new post feed activity")
-    let newPostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(me, newPost, FeedActivityType.POST)
-    conditionalLog("Try get new post feed activity: " + JSON.stringify(toPrintableFeedActivity(newPostFeedActivity)))
+    const newPostId = newPost.id
+    newPost = await Persistence.getPostByID(newPostId)
+    assert(newPost, "Failed to retrieve new post")
+    let newPostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoB, newPost, FeedActivityType.POST)
+    assert(
+        newPostFeedActivity
+        && newPostFeedActivity.sourceUser && newPostFeedActivity.sourceUser.googleid === kurantoBGoogleId
+        && newPostFeedActivity.sourcePost && newPostFeedActivity.sourcePost.id === newPost.id
+        && newPostFeedActivity.type === FeedActivityType.POST,
+        "New post feed activity does not match {sourceUser=posting user, sourcePost=new post, type=post}")
+    newPost = await Persistence.getPostByID(newPost.id)
+    let parentPostPromises: Promise<Post>[] = await Persistence.getParentPostPromisesByMappingIds(newPost.parentMappings.map((mapping) => mapping.id))
+    assert(parentPostPromises.length === 0, "Parent posts expected to be empty")
 
-    conditionalLog("\n==LIKE")
+    conditionalLog("  >> LIKE")
 
     await Persistence.likePost(kurantoNoMichi.id, newPost.id)
-    conditionalLog("Like done")
     let newPostLikes = await Persistence.getPostLikesDEBUGONLY(newPost)
-    conditionalLog("New post likes: " + JSON.stringify(toPrintableUsers(newPostLikes)))
+    assert(newPostLikes.length === 1 && newPostLikes[0].googleid === kurantoNoMichiGoogleId, "New post like not as expected")
     await Persistence.likePostHook(kurantoNoMichi, newPost, true)
-    conditionalLog("Inserted new like notification and feed activity")
-    let likeNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    conditionalLog("Try get new like notification: " + JSON.stringify(toPrintableNotif(likeNotif)))
+    let likeNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.LIKE, newPost, kurantoNoMichi)
+    assert(
+        likeNotif
+        && likeNotif.user && likeNotif.user.googleid === kurantoBGoogleId
+        && likeNotif.type === NotificationType.LIKE
+        && likeNotif.sourcePost && likeNotif.sourcePost.id === newPost.id
+        && likeNotif.sourceUser && likeNotif.sourceUser.googleid === kurantoNoMichiGoogleId,
+        "Like notification does not match {user=post user, type=like, sourcePost=new post, sourceUser=liking user}"
+    )
     let likeFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    conditionalLog("Try get new like feed activity: " + JSON.stringify(toPrintableFeedActivity(likeFeedActivity)))
+    assert(
+        likeFeedActivity
+        && likeFeedActivity.sourceUser && likeFeedActivity.sourceUser.googleid === kurantoNoMichiGoogleId
+        && likeFeedActivity.sourcePost && likeFeedActivity.sourcePost.id === newPost.id
+        && likeFeedActivity.type === FeedActivityType.LIKE,
+        "Like feed activity does not match {sourceUser=liking user, sourcePost=new post, type=like}"
+    )
 
-    conditionalLog("\n==UNLIKE")
+    conditionalLog("  >> UNLIKE")
 
     await Persistence.unlikePost(kurantoNoMichi.id, newPost.id)
-    conditionalLog("Unlike done")
     newPostLikes = await Persistence.getPostLikesDEBUGONLY(newPost)
-    conditionalLog("New post likes: " + JSON.stringify(toPrintableUsers(newPostLikes)))
+    assert(newPostLikes.length === 0, "New post likes expected to be empty")
     await Persistence.likePostHook(kurantoNoMichi, newPost, false)
-    conditionalLog("Unlike hook done")
-    likeNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    conditionalLog("Try get new like notification: " + JSON.stringify(toPrintableNotif(likeNotif)))
+    likeNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.LIKE, newPost, kurantoNoMichi)
+    assert(!likeNotif, "Like notification expected to be empty")
     likeFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    conditionalLog("Try get new like feed activity: " + JSON.stringify(toPrintableFeedActivity(likeFeedActivity)))
+    assert(!likeFeedActivity, "Like feed activity expected to be empty")
 
-    conditionalLog("\n==RE-LIKE")
+    conditionalLog("  >> RE-LIKE")
     await Persistence.likePost(kurantoNoMichi.id, newPost.id)
-    conditionalLog("Re-like done")
     await Persistence.likePostHook(kurantoNoMichi, newPost, true)
-    likeNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    conditionalLog("Try get re-like notification: " + JSON.stringify(toPrintableNotif(likeNotif)))
-    likeFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    conditionalLog("Try get re-like feed activity: " + JSON.stringify(toPrintableFeedActivity(likeFeedActivity)))
 
-    conditionalLog("\n==REPOST")
+    conditionalLog("  >> REPOST")
 
     await Persistence.repostPost(kurantoNoMichi.id, newPost.id)
-    conditionalLog("Repost done")
     let newPostReposts = await Persistence.getPostRepostsDEBUGONLY(newPost)
-    conditionalLog("New post reposts: " + JSON.stringify(toPrintableUsers(newPostReposts)))
+    assert(newPostReposts.length === 1 && newPostReposts[0].googleid === kurantoNoMichiGoogleId, "New post repost not as expected")
     await Persistence.repostHook(kurantoNoMichi, newPost, true)
-    conditionalLog("Inserted new repost notification and feed activity")
-    let repostNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.REPOST, newPost, kurantoNoMichi)
-    conditionalLog("Try get new repost notification: " + JSON.stringify(toPrintableNotif(repostNotif)))
+    let repostNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.REPOST, newPost, kurantoNoMichi)
+    assert(
+        repostNotif
+        && repostNotif.user && repostNotif.user.googleid === kurantoBGoogleId
+        && repostNotif.type === NotificationType.REPOST
+        && repostNotif.sourcePost && repostNotif.sourcePost.id === newPost.id
+        && repostNotif.sourceUser && repostNotif.sourceUser.googleid === kurantoNoMichiGoogleId,
+        "Repost notification does not match {user=post user, type=repost, sourcePost=new post, sourceUser=reposting user}"
+    )
     let repostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.REPOST)
-    conditionalLog("Try get new repost feed activity: " + JSON.stringify(toPrintableFeedActivity(repostFeedActivity)))
+    assert(
+        repostFeedActivity
+        && repostFeedActivity.sourceUser && repostFeedActivity.sourceUser.googleid === kurantoNoMichiGoogleId
+        && repostFeedActivity.sourcePost && repostFeedActivity.sourcePost.id === newPost.id
+        && repostFeedActivity.type === FeedActivityType.REPOST,
+        "Repost feed activity does not match {sourceUser=reposting user, sourcePost=new post, type=repost}"
+    )
 
-    conditionalLog("\n==UNREPOST")
+    conditionalLog("  >> UNREPOST")
 
     await Persistence.unrepostPost(kurantoNoMichi.id, newPost.id)
-    conditionalLog("Unrepost done")
     newPostReposts = await Persistence.getPostRepostsDEBUGONLY(newPost)
-    conditionalLog("New post reposts: " + JSON.stringify(toPrintableUsers(newPostReposts)))
+    assert(newPostReposts.length === 0, "New post reposts expected to be empty")
     await Persistence.repostHook(kurantoNoMichi, newPost, false)
-    conditionalLog("Unrepost hook done")
-    repostNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.REPOST, newPost, kurantoNoMichi)
-    conditionalLog("Try get new repost notification: " + JSON.stringify(toPrintableNotif(repostNotif)))
+    repostNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.REPOST, newPost, kurantoNoMichi)
+    assert(!repostNotif, "New post repost notification expected to be empty")
     repostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.REPOST)
-    conditionalLog("Try get new repost feed activity: " + JSON.stringify(toPrintableFeedActivity(repostFeedActivity)))
+    assert(!repostFeedActivity, "New post repost feed activity expected to be empty")
 
-    conditionalLog("\n==REPLY")
+    conditionalLog(">> REPLY")
+
+    conditionalLog("  >> NEW REPLY")
 
     let newReply = await Persistence.postOrReply(
-        kurantoNoMichi.googleid,
+        kurantoNoMichiGoogleId,
         "This is a very long reply that should exceed the number of characters alloted to the preview. I think it's supposed to be 420, which is symbolic because Twitter started off with 140, then got extended to 280. It's only natural that we go to 420 from here. 420, you say. I know what you're thinking, but hold that thought. Wow, the 420 char limit is longer than I thought. How am I still not done? Well, in any case, I'm hopeful you peeps will make good use of all this space.",
         false,
         VisibilityType.EVERYONE,
-        kurantoNoMichi.googleid,
+        kurantoNoMichiGoogleId,
         [newPost.id],
         [])
-    conditionalLog("Inserted new reply: " + JSON.stringify(toPrintablePost(newReply)))
     await Persistence.postOrReplyHook(newReply, [newPost.id])
-    conditionalLog("Inserted new reply notification and feed activity")
-    let newReplyNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.REPLY, newReply, kurantoNoMichi)
-    conditionalLog("Try get new reply notification: " + JSON.stringify(toPrintableNotif(newReplyNotif)))
+    let newReplyNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.REPLY, newReply, kurantoNoMichi)
+    assert(
+        newReplyNotif
+        && newReplyNotif.user && newReplyNotif.user.googleid === kurantoBGoogleId
+        && newReplyNotif.type === NotificationType.REPLY
+        && newReplyNotif.sourcePost && newReplyNotif.sourcePost.id === newReply.id
+        && newReplyNotif.sourceUser && newReplyNotif.sourceUser.googleid === kurantoNoMichiGoogleId,
+        "Reply notification does not match {user=post user, type=reply, sourcePost=reply, sourceUser=replying user}"
+    )
     let newReplyFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newReply, FeedActivityType.POST)
-    conditionalLog("Try get new reply feed activity: " + JSON.stringify(toPrintableFeedActivity(newReplyFeedActivity)))
-    conditionalLog("Try get new reply parent posts")
+    assert(
+        newReplyFeedActivity
+        && newReplyFeedActivity.sourceUser && newReplyFeedActivity.sourceUser.googleid === kurantoNoMichiGoogleId
+        && newReplyFeedActivity.sourcePost && newReplyFeedActivity.sourcePost.id === newReply.id
+        && newReplyFeedActivity.type === FeedActivityType.POST,
+        "Reply feed activity does not match {sourceUser=replying user, sourcePost=reply, type=post}"
+    )
     newReply = await Persistence.getPostByID(newReply.id)
-    if (newReply.parentMappings) {
-        const parentPostPromises = await Persistence.getParentPostPromisesByMappingIds(newReply.parentMappings.map((mapping) => mapping.id))
-        for (const parentPostPromise of parentPostPromises) {
-            conditionalLog("  New reply parent post: " + JSON.stringify(toPrintablePost(await parentPostPromise)))
-        }
-    }
+    parentPostPromises = await Persistence.getParentPostPromisesByMappingIds(newReply.parentMappings.map((mapping) => mapping.id))
+    assert(
+        parentPostPromises.length === 1
+        && (await parentPostPromises[0]).id === newPost.id,
+        "Parent posts do not match [{new post}]"
+    )
 
-    conditionalLog("\n==DELETE PARENT POST")
+    conditionalLog("  >> DELETE PARENT POST")
 
     await Persistence.deletePost(newPost)
-    conditionalLog("Deleted parent post: " + JSON.stringify(toPrintablePost(newPost)))
     const currentReply = await Persistence.getPostByID(newReply.id)
-    conditionalLog("Try get reply: " + JSON.stringify(toPrintablePost(currentReply)))
-    newPostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(me, newPost, FeedActivityType.POST)
-    conditionalLog("Try get parent post feed activity: " + JSON.stringify(newPostFeedActivity))
-    likeNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.LIKE, newPost, kurantoNoMichi)
-    conditionalLog("Try get parent post like notification: " + JSON.stringify(toPrintableNotif(likeNotif)))
+    assert(currentReply, "Failed to retrieve reply")
+    newPostFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoB, newPost, FeedActivityType.POST)
+    assert(!newPostFeedActivity, "Parent post feed activity expected to be empty")
+    likeNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.LIKE, newPost, kurantoNoMichi)
+    assert(!likeNotif, "Parent post like notification expected to be empty")
     likeFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newPost, FeedActivityType.LIKE)
-    conditionalLog("Try get parent post like feed activity: " + JSON.stringify(toPrintableFeedActivity(likeFeedActivity)))
-    newReplyNotif = await Persistence.getNotificationDEBUGONLY(me, NotificationType.REPLY, newReply, kurantoNoMichi)
-    conditionalLog("Try get reply notification: " + JSON.stringify(toPrintableNotif(newReplyNotif)))
+    assert(!likeFeedActivity, "Parent post like feed activity expected to be empty")
+    newReplyNotif = await Persistence.getNotificationDEBUGONLY(kurantoB, NotificationType.REPLY, newReply, kurantoNoMichi)
+    assert(
+        newReplyNotif
+        && newReplyNotif.user && newReplyNotif.user.googleid === kurantoBGoogleId
+        && newReplyNotif.type === NotificationType.REPLY
+        && newReplyNotif.sourcePost && newReplyNotif.sourcePost.id === newReply.id
+        && newReplyNotif.sourceUser && newReplyNotif.sourceUser.googleid === kurantoNoMichiGoogleId,
+        "Reply notification does not match {user=post user, type=reply, sourcePost=reply, sourceUser=replying user}"
+    )
     newReplyFeedActivity = await Persistence.getFeedActivityDEBUGONLY(kurantoNoMichi, newReply, FeedActivityType.POST)
-    conditionalLog("Try get reply feed activity: " + JSON.stringify(toPrintableFeedActivity(newReplyFeedActivity)))
-    conditionalLog("Try get reply parent posts")
+    assert(
+        newReplyFeedActivity
+        && newReplyFeedActivity.sourceUser && newReplyFeedActivity.sourceUser.googleid === kurantoNoMichiGoogleId
+        && newReplyFeedActivity.sourcePost && newReplyFeedActivity.sourcePost.id === newReply.id
+        && newReplyFeedActivity.type === FeedActivityType.POST,
+        "Reply feed activity does not match {sourceUser=replying user, sourcePost=reply, type=post}"
+    )
     newReply = await Persistence.getPostByID(newReply.id)
-    if (newReply.parentMappings) {
-        const parentPostPromises = await Persistence.getParentPostPromisesByMappingIds(newReply.parentMappings.map((mapping) => mapping.id))
-        for (const parentPostPromise of parentPostPromises) {
-            conditionalLog("  Reply parent post: " + JSON.stringify(toPrintablePost(await parentPostPromise)))
-        }
-    }
+    parentPostPromises = await Persistence.getParentPostPromisesByMappingIds(newReply.parentMappings.map((mapping) => mapping.id))
+    assert(
+        parentPostPromises.length === 1
+        && (await parentPostPromises[0]) === null,
+        "Parent posts expected to be empty"
+    )
 
-    conditionalLog("\n\n===DM===")
+    conditionalLog(">> DM STORAGE")
 
     const formatDMs = (dms: DM[]) => dms.map((dm) => {
         return {
@@ -295,59 +468,63 @@ export default async function testDB() {
     })
 
     await clearDB()
-    conditionalLog("DB cleared")
+    assert(await Persistence.checkDBEmptyDEBUGONLY(), "DB not cleared")
 
     const saved_number_of_retrievable_dm_s = consts.NUMBER_OF_RETRIEVABLE_DM_S
     consts.NUMBER_OF_RETRIEVABLE_DM_S = 2
     conditionalLog("Number of retrievable DMs: " + consts.NUMBER_OF_RETRIEVABLE_DM_S)
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "", false)
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog("Inserted sender user: " + JSON.stringify({ ...toPrintableUser(me), id: me.id }))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBGoogleId, "kurantoB", "", "", false)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "", false)
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog("Inserted receiver user: " + JSON.stringify({ ...toPrintableUser(kurantoNoMichi), id: kurantoNoMichi.id }))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiGoogleId, "kurantonomichi", "", "", false)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
 
     await Persistence.createOrUpdateAccountHelper(null, "dummygoogleid", "dummy", "", "", false)
     dummyUser = await Persistence.getUserByGoogleID("dummygoogleid")
-    conditionalLog("Inserted dummy user: " + JSON.stringify({ ...toPrintableUser(dummyUser), id: dummyUser.id }))
 
     const DMTimeline = [
         {
-            user: me,
+            user: kurantoB,
             recipient: kurantoNoMichi,
-            message: "Zero"
+            message: "Zero",
+            numInBank: 1
         },
         {
-            user: me,
+            user: kurantoB,
             recipient: kurantoNoMichi,
-            message: "One"
+            message: "One",
+            numInBank: 2
         },
         {
             user: kurantoNoMichi,
-            recipient: me,
-            message: "Ok two"
+            recipient: kurantoB,
+            message: "Ok two",
+            numInBank: 2
         },
         {
             user: kurantoNoMichi,
             recipient: dummyUser,
-            message: "Ok two too"
+            message: "Ok two too",
+            numInBank: 1
         },
         {
-            user: me,
+            user: kurantoB,
             recipient: kurantoNoMichi,
-            message: "Three"
+            message: "Three",
+            numInBank: 2
         },
         {
             user: dummyUser,
             recipient: kurantoNoMichi,
-            message: "Two too?"
+            message: "Two too?",
+            numInBank: 2
         },
         {
             user: kurantoNoMichi,
             recipient: dummyUser,
-            message: "Ok four too"
+            message: "Ok four too",
+            numInBank: 2
         }
     ]
 
@@ -362,113 +539,100 @@ export default async function testDB() {
 
     DMTimeline.forEach((_) => {
         funcBank.push(async (dmUnit) => {
-            conditionalLog("\n==NEW DM")
             const dmSession = await Persistence.sendDMAndReturnSession(dmUnit.user, dmUnit.recipient, dmUnit.message)
             await Persistence.processSessionPostDM(dmSession)
             const dm = await Persistence.getLatestDMFromSessionDEBUGONLY(dmSession)
-            conditionalLog(dmUnit.user.username + " says '" + dm.message + "' to " + dmUnit.recipient.username)
+            assert(dm.message === dmUnit.message, "Latest DM's message is unexpected")
             dmBank = await Persistence.getOneOnOneDMs(dmSession)
-            conditionalLog("Latest DM bank: " + JSON.stringify(formatDMs(dmBank)))
+            assert(dmBank.length === dmUnit.numInBank, "Number in DM session bank does not match")
         })
     })
 
     await executeAsync(funcBank, DMTimeline)
 
+    conditionalLog(">> DELETE DM, DELETE DM USER")
+
     await clearDB()
-    conditionalLog("\nDB cleared")
+    assert(await Persistence.checkDBEmptyDEBUGONLY(), "DB not cleared")
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoBID, "kurantoB", "", "", false)
-    me = await Persistence.getUserByGoogleID(kurantoBID)
-    conditionalLog("Inserted sender user: " + JSON.stringify(toPrintableUser(me)))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoBGoogleId, "kurantoB", "", "", false)
+    kurantoB = await Persistence.getUserByGoogleID(kurantoBGoogleId)
 
-    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiID, "kurantonomichi", "", "", false)
-    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiID)
-    conditionalLog("Inserted receiver user: " + JSON.stringify(toPrintableUser(kurantoNoMichi)))
+    await Persistence.createOrUpdateAccountHelper(null, kurantoNoMichiGoogleId, "kurantonomichi", "", "", false)
+    kurantoNoMichi = await Persistence.getUserByGoogleID(kurantoNoMichiGoogleId)
 
     await Persistence.createOrUpdateAccountHelper(null, "dummygoogleid", "dummy", "", "", false)
     dummyUser = await Persistence.getUserByGoogleID("dummygoogleid")
-    conditionalLog("Inserted dummy user: " + JSON.stringify({ ...toPrintableUser(dummyUser), id: dummyUser.id }))
 
-    conditionalLog("\n==NEW DM")
-    const dmSession = await Persistence.sendDMAndReturnSession(me, kurantoNoMichi, "I'm deleting this")
+    conditionalLog("  >> DELETE DM")
+
+    const dmSession = await Persistence.sendDMAndReturnSession(kurantoB, kurantoNoMichi, "I'm deleting this")
     await Persistence.processSessionPostDM(dmSession)
     const dm0 = await Persistence.getLatestDMFromSessionDEBUGONLY(dmSession)
-    conditionalLog(me.username + " says '" + dm0.message + "' to " + kurantoNoMichi.username)
-    dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
 
-    conditionalLog("\n==NEW DM")
-    await Persistence.sendDMAndReturnSession(kurantoNoMichi, me, "Ok")
+    await Persistence.sendDMAndReturnSession(kurantoNoMichi, kurantoB, "Ok")
     await Persistence.processSessionPostDM(dmSession)
     const dm1 = await Persistence.getLatestDMFromSessionDEBUGONLY(dmSession)
-    conditionalLog(kurantoNoMichi.username + " says '" + dm1.message + "' to " + me.username)
-    dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
-
-    conditionalLog("\n==DELETE DM")
 
     await Persistence.deleteDM(dm0)
-    conditionalLog(me.username + " deleted a DM")
     dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
+    assert(dmBank[1].message === "[Deleted message]", "Deleted DM expected to be [Deleted message]")
+    assert(dmBank[0].message === "Ok", "Not-deleted DM expected to be a different value")
 
-    conditionalLog("\n==DELETE SECOND DM")
+    conditionalLog("  >> DELETE DM USER")
 
-    await Persistence.deleteDM(dm1)
-    conditionalLog(kurantoNoMichi.username + " deleted a DM")
-    dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
-
-    conditionalLog("\n==DM TO DUMMY")
-
-    const dmSession1 = await Persistence.sendDMAndReturnSession(me, dummyUser, "Remember me")
+    const dmSession1 = await Persistence.sendDMAndReturnSession(kurantoB, dummyUser, "Remember me")
     await Persistence.processSessionPostDM(dmSession1)
-    conditionalLog(me.username + " says 'Remember me' to " + dummyUser.username)
     dmBank = await Persistence.getOneOnOneDMs(dmSession1)
-    conditionalLog("Second DM bank: " + JSON.stringify(formatDMs(dmBank)))
-
-    conditionalLog("\n==DELETE DM-ER")
-
-    conditionalLog("Try get all DM sessions")
     let allDmSessions = await Persistence.getAllDMSessionsDEBUGONLY()
-    for (const oneDmSession of allDmSessions) {
-        conditionalLog("  " + JSON.stringify(toPrintableDMSession(oneDmSession)))
-    }
+    assert(
+        allDmSessions.length === 2
+        && allDmSessions[0].participant1 && allDmSessions[0].participant1.googleid === kurantoBGoogleId
+        && allDmSessions[0].participant2 && allDmSessions[0].participant2.googleid === dummyUserID
+        && allDmSessions[1].participant1 && allDmSessions[1].participant1.googleid === kurantoBGoogleId
+        && allDmSessions[1].participant2 && allDmSessions[1].participant2.googleid === kurantoNoMichiGoogleId,
+        "DM sessions do not match [{sender, receiver}, {sender, dummy}]"
+    )
 
-    const savedDmSenderGoogleID = me.googleid
+    const savedDmSenderGoogleID = kurantoBGoogleId
     await Persistence.cleanupDeletedUserDMs(savedDmSenderGoogleID)
-    let delResult = await Persistence.deleteUser(me.googleid)
+    let delResult = await Persistence.deleteUser(kurantoBGoogleId)
     await cleanupDeletedUser(delResult)
-    conditionalLog("Deleted " + savedDmSenderGoogleID)
     dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
-    conditionalLog("Try get all DM sessions")
+    assert(
+        dmBank.length === 2
+        && dmBank[0].sender && dmBank[0].sender.googleid === kurantoNoMichiGoogleId
+        && !dmBank[1].sender,
+        "Expected deleted user to be empty and not-deleted user to be non-empty in DM bank"
+    )
     allDmSessions = await Persistence.getAllDMSessionsDEBUGONLY()
-    for (const oneDmSession of allDmSessions) {
-        conditionalLog("  " + JSON.stringify(toPrintableDMSession(oneDmSession)))
-    }
+    assert(
+        allDmSessions.length === 2
+        && !allDmSessions[0].participant1
+        && allDmSessions[0].participant2 && allDmSessions[0].participant2.googleid === dummyUserID
+        && !allDmSessions[1].participant1
+        && allDmSessions[1].participant2 && allDmSessions[1].participant2.googleid === kurantoNoMichiGoogleId,
+        "DM sessions do not match [{null, receiver}, {null, dummy}]"
+    )
 
-    conditionalLog("\n==DELETE SECOND DM-ER")
-
-    const savedDmRecipientGoogleID = kurantoNoMichi.googleid
+    const savedDmRecipientGoogleID = kurantoNoMichiGoogleId
     await Persistence.cleanupDeletedUserDMs(savedDmRecipientGoogleID)
-    delResult = await Persistence.deleteUser(kurantoNoMichi.googleid)
+    delResult = await Persistence.deleteUser(kurantoNoMichiGoogleId)
     await cleanupDeletedUser(delResult)
-    conditionalLog("Deleted " + savedDmRecipientGoogleID)
     dmBank = await Persistence.getOneOnOneDMs(dmSession)
-    conditionalLog("DM bank: " + JSON.stringify(formatDMs(dmBank)))
+    assert(dmBank.length === 0, "Expected DM bank to be empty for DM session with both users deleted")
     dmBank = await Persistence.getOneOnOneDMs(dmSession1)
-    conditionalLog("Second DM bank: " + JSON.stringify(formatDMs(dmBank)))
-    conditionalLog("Try get all DM sessions")
+    assert(dmBank.length === 1, "Expected DM bank to be non-empty for DM session with one user deleted")
     allDmSessions = await Persistence.getAllDMSessionsDEBUGONLY()
-    for (const oneDmSession of allDmSessions) {
-        conditionalLog("  " + JSON.stringify(toPrintableDMSession(oneDmSession)))
-    }
-
-    consts.NUMBER_OF_RETRIEVABLE_DM_S = saved_number_of_retrievable_dm_s
-
-    conditionalLog("\n\n===Clear DB===")
+    assert(
+        allDmSessions.length === 1
+        && !allDmSessions[0].participant1
+        && allDmSessions[0].participant2 && allDmSessions[0].participant2.googleid === dummyUserID,
+        "DM sessions do not match [{null, dummy}]"
+    )
 
     await clearDB()
-    conditionalLog("DB cleared")
+    assert(await Persistence.checkDBEmptyDEBUGONLY(), "DB not cleared")
+
+    consts.NUMBER_OF_RETRIEVABLE_DM_S = saved_number_of_retrievable_dm_s
 }

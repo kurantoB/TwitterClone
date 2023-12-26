@@ -12,6 +12,7 @@ import { PostToParentMapping } from "./entity/PostToParentMapping";
 import { isFriendOf, isMutualOf } from "./utils/followInfo";
 import { likingUsersSQB, replyMappingsSQB, repostingUsersSQB } from "./utils/post";
 import { DMSession } from "./entity/DMSession";
+import { TagSubscription } from "./entity/TagSubscription";
 
 export async function initialize() {
     await AppDataSource.initialize()
@@ -611,16 +612,6 @@ export async function getFriends(googleid: string) {
     }).map((user) => user.username)
 }
 
-export async function getBefriendedBy(googleid: string) {
-    const loadedUser = await AppDataSource.getRepository(User).findOne({
-        relations: { befriendedBy: true },
-        where: { googleid }
-    })
-    return loadedUser.befriendedBy.sort((a, b) => {
-        return a.username.localeCompare(b.username)
-    }).map((user) => user.username)
-}
-
 async function handleFriend(sourceUserGoogleId: string, targetUserId: string, action: boolean) {
     await doTransaction(async (em) => {
         const [loadedSourceUser, loadedTargetUser] = await checkRelation(sourceUserGoogleId, targetUserId, action, em)
@@ -678,6 +669,13 @@ async function handleBlock(googleid: string, targetUserId: string, action: boole
         await unfollow(googleid, targetUserId)
         await unfollow(targetUserGoogleId, loadedSourceUser.id)
     }
+}
+
+export async function blockUserHook(userGoogleId: string, targetUserId: string) {
+    const targetUserGoogleId = (await AppDataSource.getRepository(User).findOneBy({ id: targetUserId })).googleid
+    const userId = (await getUserByGoogleID(userGoogleId)).id
+    await followHook(userGoogleId, targetUserId, false)
+    await followHook(targetUserGoogleId, userId, false)
 }
 
 export async function isBlocking(googleid: string, targetUserId: string) {
@@ -782,7 +780,7 @@ export async function processSessionPostDM(dmSession: DMSession) {
         .orderBy('dm.createTime', 'DESC')
         .getOne()
         .then((dm) => dm.createTime)
-    
+
     dmSession.lastUpdate = lastUpdate
     await AppDataSource.getRepository(DMSession).save(dmSession)
 }
@@ -919,7 +917,9 @@ async function makeNotification(
         const notifToDelete = await AppDataSource.getRepository(Notification).findOne({
             where: whereClause,
         })
-        await AppDataSource.getRepository(Notification).remove(notifToDelete)
+        if (notifToDelete) {
+            await AppDataSource.getRepository(Notification).remove(notifToDelete)
+        }
     }
 }
 
@@ -1117,13 +1117,14 @@ export async function getAllDMSessionsDEBUGONLY() {
         relations: {
             participant1: true,
             participant2: true
-        }
+        },
+        order: { lastUpdate: 'DESC' }
     })
 }
 
 export async function getCompleteDMSessionDEBUGONLY(dmSession: DMSession) {
     return await AppDataSource.getRepository(DMSession).findOne({
-        where: { id : dmSession.id },
+        where: { id: dmSession.id },
         relations: {
             participant1: true,
             participant2: true
@@ -1139,4 +1140,18 @@ export async function clearDMsDEBUGONLY() {
 export async function clearHashtagsDEBUGONLY() {
     const hashtags = await AppDataSource.getRepository(Hashtag).find()
     await AppDataSource.getRepository(Hashtag).remove(hashtags)
+}
+
+export async function checkDBEmptyDEBUGONLY() {
+    const feedActivityCount = await AppDataSource.getRepository(FeedActivity).count()
+    const userCount = await AppDataSource.getRepository(User).count()
+    const postCount = await AppDataSource.getRepository(Post).count()
+    const notificationCount = await AppDataSource.getRepository(Notification).count()
+    const dmCount = await AppDataSource.getRepository(DM).count()
+    const dmSessionCount = await AppDataSource.getRepository(DMSession).count()
+    const hashtagCount = await AppDataSource.getRepository(Hashtag).count()
+    const tagSubscrCount = await AppDataSource.getRepository(TagSubscription).count()
+    const parentMappingCount = await AppDataSource.getRepository(PostToParentMapping).count()
+
+    return feedActivityCount + userCount + postCount + notificationCount + dmCount + dmSessionCount + hashtagCount + tagSubscrCount + parentMappingCount === 0
 }
